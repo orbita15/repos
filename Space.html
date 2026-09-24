@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MaGneTo</title>
+  <style>
+    body {
+      background: linear-gradient(135deg, #1e3c72 0%, #3366CC 50%, #6a11cb 100%);
+      background-attachment: fixed;
+      min-height: 100vh;
+      margin: 0;
+      padding: 10px;
+    }
+    .btn { border-radius: 50%; }
+    #up { position: fixed; display: flex; flex-direction: column; bottom: 3%; right: 3%; }
+    .wrapper { min-height: 50px; display: grid; grid-template-columns: 2fr 1fr 1fr; }
+
+    #player-wrap {
+      position: relative;
+      width: 100%;
+      height: 480px;
+      background: #000;
+      margin-bottom: 10px;
+    }
+    #pic {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    #playbtn {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 90px;
+      color: rgba(255,255,255,0.85);
+      text-shadow: 0 0 20px #000, 0 0 4px #000;
+      cursor: pointer;
+      user-select: none;
+      transition: transform 0.15s;
+    }
+    #playbtn:hover { transform: translate(-50%, -50%) scale(1.1); }
+    #frame1 {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      border: 0;
+      display: none;
+      background: #000;
+    }
+
+    .search {
+      width: 100%;
+      min-height: 50px;
+      margin-bottom: 10px;
+      background-color: #e8f0ff;
+      color: #1e3c72;
+      border: 2px solid #6a11cb;
+      border-radius: 8px;
+      padding: 0 12px;
+      font-size: 29px;
+      box-sizing: border-box;
+      outline: none;
+      transition: background-color 0.2s, box-shadow 0.2s;
+    }
+    .search:focus {
+      background-color: #ffffff;
+      box-shadow: 0 0 12px #6a11cb;
+    }
+    .search::placeholder { color: #5a6b8c; }
+  </style>
+</head>
+<body>
+
+  <div id="player-wrap">
+    <img id="pic" alt="" referrerpolicy="no-referrer"
+         src="https://wsrv.nl/?url=i.ytimg.com/vi/AyJyD8ztmfM/hqdefault.jpg">
+    <div id="playbtn" style="display:none">▶</div>
+    <iframe id="frame1" frameborder="0" allowfullscreen
+            allow="autoplay; encrypted-media; picture-in-picture"></iframe>
+  </div>
+
+  <input type="text" class="search" placeholder="Поиск видео...">
+  <div class="wrapper">
+    <input type="Submit" class="btn" value="Искать" onclick="getData()">
+    <input type="button" class="btn" value="Очистить" onclick="clearD()">
+    <input type="button" class="btn" value="Очистить список" onclick="clearZ()">
+    <div id="up">
+      <input type="button" class="btn" value="Вверх" onclick="up()">
+      <input type="button" class="btn" value="Назад" onclick="back()">
+    </div>
+  </div>
+
+  <div id="bod" style="font-size: 28px;"></div>
+
+  <script>
+    var ppp, zapros, pred, sY = 0;
+    var ban = ['Россия 24', 'RT на русском', 'НТВ', 'СЕГОДНЯ'];
+    var currentId = null;
+
+    var bod = document.getElementById('bod');
+    bod.style.fontSize = '28px';
+    var pic = document.getElementById('pic');
+    var frame = document.getElementById('frame1');
+    var playbtn = document.getElementById('playbtn');
+
+    // --- Показать обложку (через рабочий прокси wsrv.nl) ---
+    function setThumb(id) {
+      currentId = id;
+      // Прячем плеер, показываем картинку и кнопку Play
+      frame.style.display = 'none';
+      frame.removeAttribute('src');
+      pic.style.display = 'block';
+      playbtn.style.display = 'block';
+      pic.src = 'https://wsrv.nl/?url=i.ytimg.com/vi/' + id + '/hqdefault.jpg';
+    }
+
+    // --- Загрузить видео в iframe поверх картинки ---
+    function playVideo() {
+      if (!currentId) return;
+      frame.src = 'https://www.youtube.com/embed/' + currentId + '?autoplay=1';
+      frame.style.display = 'block';
+      playbtn.style.display = 'none';
+    }
+
+    playbtn.onclick = playVideo;
+
+    function getData() {
+      zapros = document.getElementsByClassName('search')[0].value;
+      if (!zapros) { bod.innerHTML = ''; return; }
+      conneht();
+    }
+
+    function conneht() {
+      var aj = new XMLHttpRequest();
+      var url = 'https://www.googleapis.com/youtube/v3/search?maxResults=50&part=snippet&key=AIzaSyDtgXVv39MVYBw6Jy_tGbLBpcTIvluewKY&type=video&q='
+                + encodeURIComponent(zapros);
+      aj.open('GET', url, true);
+      aj.onreadystatechange = function () {
+        if (aj.readyState !== 4) return;
+        if (aj.status === 200) {
+          ppp = JSON.parse(aj.responseText);
+          spisok();
+        } else {
+          console.error('API вернул', aj.status, aj.responseText);
+        }
+      };
+      aj.send();
+    }
+
+    function spisok() {
+      bod.innerHTML = '';
+      ppp.items.forEach(function (i) {
+        var d = bod.appendChild(document.createElement('div'));
+        d.style.fontSize = '30px';
+        d.innerHTML = i.snippet.title + ' ';
+
+        var chan = bod.appendChild(document.createElement('div'));
+        chan.chID = i.snippet.channelId;
+        chan.onclick = openChanell;
+        chan.innerHTML = 'Канал ' + i.snippet.channelTitle;
+        chan.style.fontSize = '10px';
+
+        if (ban.indexOf(i.snippet.channelTitle) !== -1) d.style.fontSize = '20px';
+
+        d.i = i.id.videoId;
+        d.onclick = function () {
+          if (pred) pred.style.color = 'blue';
+          d.style.color = 'white';
+          pred = d;
+          setThumb(d.i);   // <-- обложка через wsrv.nl
+          up();
+        };
+      });
+    }
+
+    function openChanell() { window.open('https://www.youtube.com/channel/' + this.chID + '/videos'); }
+    function clearD() { document.getElementsByClassName('search')[0].value = ''; }
+    function clearZ() { bod.innerHTML = ''; }
+    function up() { sY = window.scrollY; window.scrollTo(0, 0); }
+    function back() { window.scrollTo(0, sY); }
+  </script>
+</body>
+</html>
