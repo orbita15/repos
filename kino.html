@@ -224,19 +224,19 @@
         controls.maxDistance = 50;
 
         // ============================================================
-        // 2. СВЕТ  (★ расширенная теневая камера для деревьев)
+        // 2. СВЕТ
         // ============================================================
         scene.add(new THREE.AmbientLight(0x404060, 0.8));
 
         const moonLight = new THREE.DirectionalLight(0x8899bb, 0.5);
         moonLight.position.set(-15, 25, -10);
         moonLight.castShadow = true;
-        moonLight.shadow.mapSize.width = 2048;    // ← было 1024
-        moonLight.shadow.mapSize.height = 2048;   // ← было 1024
-        moonLight.shadow.camera.left   = -50;     // ← было -30
-        moonLight.shadow.camera.right  =  50;     // ← было  30
-        moonLight.shadow.camera.top    =  50;     // ← было  30
-        moonLight.shadow.camera.bottom = -50;     // ← было -30
+        moonLight.shadow.mapSize.width = 2048;
+        moonLight.shadow.mapSize.height = 2048;
+        moonLight.shadow.camera.left   = -50;
+        moonLight.shadow.camera.right  =  50;
+        moonLight.shadow.camera.top    =  50;
+        moonLight.shadow.camera.bottom = -50;
         scene.add(moonLight);
 
         const screenGlow = new THREE.PointLight(0xffaa55, 1.2, 40, 2);
@@ -253,20 +253,57 @@
         scene.add(spotLight.target);
 
         // ============================================================
-        // 3. ЗЕМЛЯ
+        // 3. ЗЕМЛЯ  (★ с радиальным градиентом — края уходят в цвет фона)
         // ============================================================
+        const groundCanvas = document.createElement('canvas');
+        groundCanvas.width = 1024;
+        groundCanvas.height = 1024;
+        const gctx = groundCanvas.getContext('2d');
+
+        // Радиальный градиент от центра к краям
+        // Радиус 500 покрывает углы квадрата 1024×1024
+        // (расстояние от центра до угла = sqrt(512² + 512²) ≈ 724)
+        const groundGrad = gctx.createRadialGradient(512, 512, 100, 512, 512, 640);
+        groundGrad.addColorStop(0.00, '#25252e');   // центр — чуть светлее
+        groundGrad.addColorStop(0.35, '#1a1a22');   // основная земля (было 0x1a1a22)
+        groundGrad.addColorStop(0.62, '#131320');   // плавный переход
+        groundGrad.addColorStop(0.82, '#0a0a15');   // почти фон
+        groundGrad.addColorStop(1.00, '#050510');   // точно цвет фона и тумана
+
+        gctx.fillStyle = groundGrad;
+        gctx.fillRect(0, 0, 1024, 1024);
+
+        // Зернистость — чтобы земля не была слишком «гладкой»
+        gctx.fillStyle = 'rgba(255,255,255,0.012)';
+        for (let i = 0; i < 4000; i++) {
+            const px = Math.random() * 1024;
+            const py = Math.random() * 1024;
+            gctx.fillRect(px, py, 1, 1);
+        }
+
+        const groundTexture = new THREE.CanvasTexture(groundCanvas);
+        groundTexture.encoding = THREE.sRGBEncoding;
+        groundTexture.minFilter = THREE.LinearFilter;
+        groundTexture.magFilter = THREE.LinearFilter;
+        groundTexture.generateMipmaps = false;
+
         const ground = new THREE.Mesh(
             new THREE.PlaneGeometry(100, 100),
-            new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.9, metalness: 0.1 })
+            new THREE.MeshStandardMaterial({
+                map: groundTexture,
+                roughness: 0.9,
+                metalness: 0.1
+            })
         );
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
 
+        // Разметка парковки — оставляем, но она теперь поверх градиента
         const lineMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.8 });
         for (let i = -3; i <= 3; i++) {
             const line = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.01, 12), lineMaterial);
-            line.position.set(i * 5, 0.01, 0);
+            line.position.set(i * 5, 0.02, 0);   // чуть приподняли, чтобы не мерцала с землёй
             line.receiveShadow = true;
             scene.add(line);
         }
@@ -828,7 +865,6 @@
             videoElement.addEventListener('canplay', onCanPlay);
             pendingHandlers.push(['loadedmetadata', onMeta], ['canplay', onCanPlay]);
 
-            // ★ Таймаут источника увеличен с 18 до 36 секунд
             sourceLoadTimeout = setTimeout(() => {
                 sourceLoadTimeout = null;
                 if (!isLoaded) {
@@ -840,15 +876,14 @@
 
             if (source.type === 'hls') {
                 if (window.Hls && Hls.isSupported()) {
-                    // ★ Все таймауты HLS увеличены вдвое
                     const hls = new Hls({
                         maxBufferLength: 20,
                         maxMaxBufferLength: 40,
-                        manifestLoadingTimeOut: 30000,  // было 15000
+                        manifestLoadingTimeOut: 30000,
                         manifestLoadingMaxRetry: 2,
-                        levelLoadingTimeOut:    30000,  // было 15000
+                        levelLoadingTimeOut:    30000,
                         levelLoadingMaxRetry:   2,
-                        fragLoadingTimeOut:     60000,  // было 30000
+                        fragLoadingTimeOut:     60000,
                         fragLoadingMaxRetry:    3,
                         enableWorker: true,
                         lowLatencyMode: false
@@ -930,7 +965,6 @@
                 if (!soundEnabled) {
                     enableSound();
                     volumeWrap.classList.add('show');
-                    // ★ Время показа панели громкости увеличено с 4 до 8 секунд
                     setTimeout(() => volumeWrap.classList.remove('show'), 8000);
                 }
 
@@ -1132,23 +1166,19 @@
         }
 
         const treePositions = [
-            // За экраном (задний фон)
             [-26, -18, 1.3, 'fir'], [-18, -23, 1.1, 'fir'],
             [-10, -26, 1.4, 'fir'], [-2,  -29, 1.2, 'broad'],
             [6,   -26, 1.3, 'fir'], [14,  -23, 1.0, 'broad'],
             [22,  -21, 1.2, 'fir'], [30,  -16, 1.1, 'broad'],
 
-            // Левая сторона
             [-30, -10, 1.2, 'broad'], [-33, -2, 1.4, 'fir'],
             [-35,  8,  1.1, 'broad'], [-32, 16, 1.3, 'fir'],
             [-30,  24, 1.0, 'broad'], [-28, 32, 1.2, 'fir'],
 
-            // Правая сторона
             [30,  -10, 1.3, 'broad'], [33, -2,  1.1, 'fir'],
             [35,   8,  1.4, 'broad'], [32, 16,  1.2, 'fir'],
             [30,   24, 1.1, 'broad'], [28, 32,  1.3, 'fir'],
 
-            // Позади камеры
             [-22, 36, 1.2, 'broad'], [-12, 38, 1.0, 'fir'],
             [0,   40, 1.3, 'broad'], [12,  38, 1.1, 'fir'],
             [22,  36, 1.2, 'broad']
