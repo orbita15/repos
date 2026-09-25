@@ -2,64 +2,206 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Ночная парковка — Уличный кинотеатр</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: Arial, Helvetica, sans-serif; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { margin: 0; padding: 0; overflow: hidden; background-color: #000; font-family: Arial, Helvetica, sans-serif; width: 100%; height: 100%; }
+        canvas { display: block; }
+
         #info {
-            position: absolute; top: 20px; left: 20px; color: #fff; background: rgba(0,0,0,0.6);
-            padding: 10px 20px; border-radius: 8px; pointer-events: none; z-index: 100; font-size: 14px;
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            color: #fff; background: rgba(0,0,0,0.6);
+            padding: 8px 16px; border-radius: 8px; pointer-events: none;
+            z-index: 100; font-size: 13px; white-space: nowrap;
+            max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
         }
         #playHint {
-            position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
-            color: #fff; background: rgba(0,0,0,0.7); padding: 12px 24px;
-            border-radius: 8px; z-index: 100; font-size: 16px;
-            cursor: pointer; transition: opacity 0.5s;
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            color: #fff; background: rgba(0,0,0,0.85); padding: 12px 22px;
+            border-radius: 8px; z-index: 100; font-size: 15px;
+            cursor: pointer; transition: opacity 0.5s; border: 2px solid #4dff9a;
+            box-shadow: 0 0 20px rgba(77, 255, 154, 0.5);
+            text-align: center; max-width: 90vw;
         }
         #playHint.hidden { opacity: 0; pointer-events: none; }
-        #status {
-            position: absolute; top: 20px; right: 20px; color: #8f8; background: rgba(0,0,0,0.6);
-            padding: 8px 16px; border-radius: 8px; z-index: 100; font-size: 12px;
-            font-family: monospace; max-width: 320px;
+
+        #menuToggle {
+            position: absolute; top: 20px; left: 20px; z-index: 200;
+            width: 48px; height: 48px; border-radius: 8px;
+            background: rgba(0,0,0,0.8); color: #fff; border: 2px solid #555;
+            font-size: 22px; cursor: pointer; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s; padding: 0;
         }
-        #sourceList {
-            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 8px; z-index: 100; flex-wrap: wrap; justify-content: center;
-            max-width: 95vw;
+        #menuToggle:hover, #menuToggle:active { background: #333; border-color: #888; }
+
+        #channelMenu {
+            position: absolute; top: 0; left: 0; bottom: 0;
+            width: min(320px, 85vw);
+            background: rgba(10, 14, 24, 0.97); border-right: 2px solid #2a7;
+            z-index: 190; transform: translateX(-100%);
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex; flex-direction: column;
+            box-shadow: 4px 0 30px rgba(0,0,0,0.8);
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
         }
-        .srcBtn {
-            background: rgba(0,0,0,0.7); color: #fff; border: 1px solid #555;
-            padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px;
+        #channelMenu.open { transform: translateX(0); }
+
+        #menuHeader {
+            padding: 16px 20px; border-bottom: 2px solid #2a7;
+            display: flex; align-items: center; justify-content: space-between;
+            flex-shrink: 0;
         }
-        .srcBtn.active { background: #2a7; border-color: #2a7; }
-        .srcBtn.ok { background: #175; border-color: #3a8; }
-        .srcBtn.fail { background: #611; border-color: #a33; }
-        .srcBtn:hover { background: #333; }
+        #menuHeader h2 {
+            margin: 0; color: #4dff9a; font-size: 17px;
+            font-weight: bold; letter-spacing: 0.5px;
+        }
+        #menuClose {
+            background: none; border: none; color: #888; font-size: 24px;
+            cursor: pointer; padding: 0; width: 32px; height: 32px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 6px;
+        }
+        #menuClose:hover { color: #fff; background: rgba(255,255,255,0.1); }
+
+        #channelList { flex: 1; overflow-y: auto; padding: 8px 0; -webkit-overflow-scrolling: touch; }
+        #channelList::-webkit-scrollbar { width: 6px; }
+        #channelList::-webkit-scrollbar-track { background: transparent; }
+        #channelList::-webkit-scrollbar-thumb { background: #2a7; border-radius: 3px; }
+
+        .channelItem {
+            display: flex; align-items: center; gap: 10px;
+            padding: 11px 20px; cursor: pointer; color: #c8d0dc;
+            font-size: 14px; transition: background 0.15s;
+            border-left: 3px solid transparent;
+        }
+        .channelItem:hover, .channelItem:active { background: rgba(120, 200, 255, 0.08); }
+        .channelItem.active {
+            background: rgba(77, 255, 154, 0.12);
+            border-left-color: #4dff9a; color: #fff; font-weight: bold;
+        }
+        .channelItem.ok .statusDot { background: #4dff9a; box-shadow: 0 0 8px #4dff9a; }
+        .channelItem.fail .statusDot { background: #ff5b5b; box-shadow: 0 0 8px #ff5b5b; }
+        .channelItem.loading .statusDot { background: #ffd24d; animation: pulse 1s infinite; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .statusDot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: #555; flex-shrink: 0;
+            transition: all 0.3s;
+        }
+        .channelName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .channelType {
+            font-size: 10px; padding: 2px 6px; border-radius: 4px;
+            background: rgba(255,255,255,0.1); color: #8fa0b5;
+            font-family: monospace; flex-shrink: 0;
+        }
+
+        #soundBtn {
+            position: absolute; top: 20px; right: 20px; z-index: 100;
+            width: 48px; height: 48px; border-radius: 50%;
+            background: rgba(0,0,0,0.7); color: #fff; border: 2px solid #555;
+            font-size: 22px; cursor: pointer; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s; padding: 0;
+        }
+        #soundBtn:hover, #soundBtn:active { background: #333; border-color: #888; }
+        #soundBtn.on { border-color: #4dff9a; color: #4dff9a; box-shadow: 0 0 15px rgba(77,255,154,0.5); }
+        #soundBtn.off { border-color: #a33; color: #ff5b5b; }
+
+        #volumeWrap {
+            position: absolute; top: 78px; right: 20px; z-index: 100;
+            background: rgba(0,0,0,0.85); padding: 10px 12px; border-radius: 10px;
+            display: none; align-items: center; gap: 8px; color: #fff;
+            border: 1px solid #444; font-size: 12px;
+        }
+        #volumeWrap.show { display: flex; }
+        #volumeSlider { width: 110px; cursor: pointer; accent-color: #4dff9a; }
+
         #streamVideo {
             position: absolute; top: -9999px; left: -9999px;
             width: 1px; height: 1px; opacity: 0.01; pointer-events: none;
+        }
+
+        #menuOverlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.4);
+            z-index: 180; opacity: 0; pointer-events: none;
+            transition: opacity 0.35s;
+        }
+        #menuOverlay.show { opacity: 1; pointer-events: auto; }
+
+        @media (max-width: 600px) {
+            #info {
+                top: 20px;
+                left: 78px;
+                right: 78px;
+                transform: none;
+                font-size: 11px;
+                padding: 6px 10px;
+                max-width: none;
+                text-align: center;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            #menuToggle { width: 44px; height: 44px; font-size: 20px; top: 18px; left: 14px; }
+            #soundBtn { width: 44px; height: 44px; font-size: 20px; top: 18px; right: 14px; }
+            #volumeWrap { top: 72px; right: 14px; }
+            #volumeSlider { width: 90px; }
+            #playHint { font-size: 13px; padding: 10px 16px; bottom: 30px; }
+            .channelItem { padding: 12px 16px; font-size: 15px; }
+        }
+
+        @media (orientation: landscape) and (max-height: 500px) {
+            #info { display: none; }
+            #menuToggle { width: 40px; height: 40px; font-size: 18px; top: 10px; left: 10px; }
+            #soundBtn { width: 40px; height: 40px; font-size: 18px; top: 10px; right: 10px; }
+            #channelMenu { width: min(300px, 50vw); }
+            #playHint { bottom: 15px; font-size: 12px; padding: 8px 14px; }
         }
     </style>
 </head>
 <body>
     <div id="info">🎥 Ночная парковка — Уличный кинотеатр</div>
-    <div id="status">Источник: —</div>
-    <div id="playHint">▶ Нажмите в любом месте, чтобы запустить видео</div>
-    <div id="sourceList"></div>
+    <div id="playHint">▶ НАЖМИТЕ, ЧТОБЫ ЗАПУСТИТЬ ВИДЕО СО ЗВУКОМ</div>
+
+    <button id="menuToggle">☰</button>
+    <div id="menuOverlay"></div>
+
+    <div id="channelMenu">
+        <div id="menuHeader">
+            <h2>📺 КАНАЛЫ</h2>
+            <button id="menuClose">✕</button>
+        </div>
+        <div id="channelList"></div>
+    </div>
+
+    <button id="soundBtn" class="off" title="Включить звук">🔇</button>
+    <div id="volumeWrap">
+        <span>🔊</span>
+        <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.7">
+        <span id="volumeVal">70%</span>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
 
-    <video id="streamVideo" crossorigin="anonymous" playsinline muted loop preload="auto"></video>
+    <video id="streamVideo" playsinline loop preload="auto"></video>
 
     <script>
         // ============================================================
-        // 1. БАЗОВЫЕ НАСТРОЙКИ
+        // 1. СЦЕНА
         // ============================================================
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050510);
-        scene.fog = new THREE.Fog(0x050510, 30, 120);
+        scene.fog = new THREE.Fog(0x050510, 30, 140);
 
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(12, 6, 22);
@@ -82,19 +224,19 @@
         controls.maxDistance = 50;
 
         // ============================================================
-        // 2. ОСВЕЩЕНИЕ
+        // 2. СВЕТ  (★ расширенная теневая камера для деревьев)
         // ============================================================
         scene.add(new THREE.AmbientLight(0x404060, 0.8));
 
         const moonLight = new THREE.DirectionalLight(0x8899bb, 0.5);
         moonLight.position.set(-15, 25, -10);
         moonLight.castShadow = true;
-        moonLight.shadow.mapSize.width = 1024;
-        moonLight.shadow.mapSize.height = 1024;
-        moonLight.shadow.camera.left = -30;
-        moonLight.shadow.camera.right = 30;
-        moonLight.shadow.camera.top = 30;
-        moonLight.shadow.camera.bottom = -30;
+        moonLight.shadow.mapSize.width = 2048;    // ← было 1024
+        moonLight.shadow.mapSize.height = 2048;   // ← было 1024
+        moonLight.shadow.camera.left   = -50;     // ← было -30
+        moonLight.shadow.camera.right  =  50;     // ← было  30
+        moonLight.shadow.camera.top    =  50;     // ← было  30
+        moonLight.shadow.camera.bottom = -50;     // ← было -30
         scene.add(moonLight);
 
         const screenGlow = new THREE.PointLight(0xffaa55, 1.2, 40, 2);
@@ -114,7 +256,7 @@
         // 3. ЗЕМЛЯ
         // ============================================================
         const ground = new THREE.Mesh(
-            new THREE.PlaneGeometry(80, 80),
+            new THREE.PlaneGeometry(100, 100),
             new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.9, metalness: 0.1 })
         );
         ground.rotation.x = -Math.PI / 2;
@@ -130,16 +272,16 @@
         }
 
         // ============================================================
-        // 4. ЭКРАН И КАРКАС
+        // 4. ЭКРАН + КАРКАС
         // ============================================================
         const screenWidth = 16;
         const screenHeight = 9;
 
         const screenBacking = new THREE.Mesh(
             new THREE.PlaneGeometry(screenWidth, screenHeight),
-            new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x111111 })
+            new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.FrontSide })
         );
-        screenBacking.position.set(0, 5.5, 1.1);
+        screenBacking.position.set(0, 5.5, 0.95);
         scene.add(screenBacking);
 
         const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.8 });
@@ -161,7 +303,7 @@
         rightPost.castShadow = true; scene.add(rightPost);
 
         // ============================================================
-        // 5. ИНФОРМАЦИОННАЯ ПАНЕЛЬ
+        // 5. ИНФО-CANVAS
         // ============================================================
         const infoCanvas = document.createElement('canvas');
         infoCanvas.width = 1280;
@@ -170,11 +312,109 @@
 
         const infoTexture = new THREE.CanvasTexture(infoCanvas);
         infoTexture.minFilter = THREE.LinearFilter;
+        infoTexture.magFilter = THREE.LinearFilter;
         infoTexture.encoding = THREE.sRGBEncoding;
 
+        // ============================================================
+        // 6. ВИДЕО + ЗВУК
+        // ============================================================
+        const videoElement = document.getElementById('streamVideo');
+        videoElement.playsInline = true;
+        videoElement.loop = true;
+        videoElement.volume = 0.7;
+
+        const soundBtn    = document.getElementById('soundBtn');
+        const volumeWrap  = document.getElementById('volumeWrap');
+        const volumeSlider= document.getElementById('volumeSlider');
+        const volumeVal   = document.getElementById('volumeVal');
+
+        let soundEnabled = false;
+        let userInteracted = false;
+
+        function updateSoundBtn() {
+            if (soundEnabled) {
+                soundBtn.textContent = '🔊';
+                soundBtn.classList.remove('off');
+                soundBtn.classList.add('on');
+                soundBtn.title = 'Выключить звук';
+            } else {
+                soundBtn.textContent = '🔇';
+                soundBtn.classList.remove('on');
+                soundBtn.classList.add('off');
+                soundBtn.title = 'Включить звук';
+            }
+        }
+
+        function enableSound() {
+            soundEnabled = true;
+            videoElement.muted = false;
+            videoElement.volume = parseFloat(volumeSlider.value);
+            videoElement.play().catch(() => {});
+            updateSoundBtn();
+        }
+
+        function disableSound() {
+            soundEnabled = false;
+            videoElement.muted = true;
+            updateSoundBtn();
+        }
+
+        soundBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            userInteracted = true;
+            if (soundEnabled) {
+                disableSound();
+                volumeWrap.classList.remove('show');
+            } else {
+                enableSound();
+                volumeWrap.classList.add('show');
+            }
+        });
+
+        volumeSlider.addEventListener('input', () => {
+            const v = parseFloat(volumeSlider.value);
+            videoElement.volume = v;
+            volumeVal.textContent = Math.round(v * 100) + '%';
+            if (v > 0 && !soundEnabled) enableSound();
+            if (v === 0) videoElement.muted = true;
+            else if (soundEnabled) videoElement.muted = false;
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'm' || e.key === 'M' || e.key === 'ь' || e.key === 'Ь') {
+                if (soundEnabled) disableSound();
+                else enableSound();
+            }
+        });
+
+        updateSoundBtn();
+
+        // ============================================================
+        // 7. ТЕКСТУРЫ
+        // ============================================================
+        const videoTexture = new THREE.VideoTexture(videoElement);
+        videoTexture.minFilter = THREE.LinearFilter;
+        videoTexture.magFilter = THREE.LinearFilter;
+        videoTexture.format = THREE.RGBAFormat;
+        videoTexture.generateMipmaps = false;
+        videoTexture.encoding = THREE.sRGBEncoding;
+
+        const screenMaterial = new THREE.MeshBasicMaterial({
+            map: infoTexture,
+            side: THREE.FrontSide,
+            toneMapped: false
+        });
+
+        const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(screenWidth, screenHeight), screenMaterial);
+        screenMesh.position.set(0, 5.5, 1.05);
+        scene.add(screenMesh);
+
+        // ============================================================
+        // 8. СОСТОЯНИЕ UI
+        // ============================================================
         const uiState = {
             title: 'УЛИЧНЫЙ КИНОТЕАТР',
-            statusLine: 'Инициализация…',
+            statusLine: 'Запуск…',
             currentName: '—',
             currentStatus: 'waiting',
             sources: [],
@@ -187,6 +427,7 @@
             const time = new Date().toLocaleTimeString('ru-RU');
             uiState.log.unshift(`[${time}] ${text}`);
             if (uiState.log.length > 6) uiState.log.pop();
+            console.log(text);
         }
 
         function statusColor(s) {
@@ -198,7 +439,6 @@
                 default:        return '#8fa0b5';
             }
         }
-
         function statusLabel(s) {
             switch (s) {
                 case 'ready':   return 'ГОТОВ';
@@ -219,76 +459,82 @@
             ictx.fillStyle = grad;
             ictx.fillRect(0, 0, W, H);
 
-            ictx.fillStyle = 'rgba(255,255,255,0.02)';
+            ictx.fillStyle = 'rgba(255,255,255,0.025)';
             for (let y = 0; y < H; y += 4) ictx.fillRect(0, y, W, 2);
 
-            ictx.strokeStyle = 'rgba(120,200,255,0.25)';
+            ictx.strokeStyle = 'rgba(120,200,255,0.3)';
             ictx.lineWidth = 4;
             ictx.strokeRect(20, 20, W - 40, H - 40);
 
             ictx.fillStyle = '#7ec8ff';
-            ictx.font = 'bold 46px Arial';
+            ictx.font = 'bold 48px Arial';
             ictx.textAlign = 'center';
             ictx.textBaseline = 'top';
             ictx.fillText('🎬  ' + uiState.title, W / 2, 50);
 
-            ictx.strokeStyle = 'rgba(120,200,255,0.4)';
+            ictx.strokeStyle = 'rgba(120,200,255,0.5)';
             ictx.lineWidth = 2;
             ictx.beginPath();
-            ictx.moveTo(60, 120);
-            ictx.lineTo(W - 60, 120);
+            ictx.moveTo(60, 125);
+            ictx.lineTo(W - 60, 125);
             ictx.stroke();
 
             ictx.textAlign = 'left';
+            ictx.font = 'bold 36px Arial';
+            ictx.fillStyle = soundEnabled ? '#4dff9a' : '#ff5b5b';
+            ictx.fillText(soundEnabled ? '🔊' : '🔇', 70, 145);
+            ictx.fillStyle = '#aab6c8';
+            ictx.font = '20px Arial';
+            ictx.fillText(soundEnabled ? 'ЗВУК ВКЛ' : 'ЗВУК ВЫКЛ', 120, 152);
+
             ictx.fillStyle = '#aab6c8';
             ictx.font = '26px Arial';
-            ictx.fillText('ТЕКУЩИЙ ИСТОЧНИК:', 70, 145);
+            ictx.fillText('ТЕКУЩИЙ КАНАЛ:', 70, 195);
 
             ictx.fillStyle = '#ffffff';
-            ictx.font = 'bold 40px Arial';
-            ictx.fillText(uiState.currentName, 70, 185);
+            ictx.font = 'bold 42px Arial';
+            ictx.fillText(uiState.currentName, 70, 235);
 
             const badgeColor = statusColor(uiState.currentStatus);
-            ictx.fillStyle = badgeColor + '30';
-            ictx.fillRect(W - 380, 175, 310, 55);
+            ictx.fillStyle = badgeColor + '40';
+            ictx.fillRect(W - 400, 215, 330, 60);
             ictx.strokeStyle = badgeColor;
-            ictx.lineWidth = 3;
-            ictx.strokeRect(W - 380, 175, 310, 55);
-
+            ictx.lineWidth = 4;
+            ictx.strokeRect(W - 400, 215, 330, 60);
             ictx.fillStyle = badgeColor;
-            ictx.font = 'bold 30px Arial';
+            ictx.font = 'bold 34px Arial';
             ictx.textAlign = 'center';
-            ictx.fillText(statusLabel(uiState.currentStatus), W - 225, 188);
+            ictx.fillText(statusLabel(uiState.currentStatus), W - 235, 230);
 
             if (uiState.currentStatus === 'loading') {
-                const cx = W - 420;
-                const cy = 202;
+                const cx = W - 440;
+                const cy = 245;
                 ictx.strokeStyle = badgeColor;
                 ictx.lineWidth = 6;
                 ictx.beginPath();
-                ictx.arc(cx, cy, 20, uiState.spinner, uiState.spinner + Math.PI * 1.4);
+                ictx.arc(cx, cy, 22, uiState.spinner, uiState.spinner + Math.PI * 1.4);
                 ictx.stroke();
             }
 
             ictx.textAlign = 'left';
             ictx.fillStyle = '#d7e2f0';
             ictx.font = '28px Arial';
-            ictx.fillText(uiState.statusLine, 70, 260);
+            ictx.fillText(uiState.statusLine, 70, 305);
 
-            ictx.strokeStyle = 'rgba(120,200,255,0.2)';
+            ictx.strokeStyle = 'rgba(120,200,255,0.25)';
             ictx.beginPath();
-            ictx.moveTo(60, 310);
-            ictx.lineTo(W - 60, 310);
+            ictx.moveTo(60, 355);
+            ictx.lineTo(W - 60, 355);
             ictx.stroke();
 
             ictx.fillStyle = '#7ec8ff';
             ictx.font = 'bold 24px Arial';
-            ictx.fillText('СПИСОК ИСТОЧНИКОВ:', 70, 330);
+            ictx.fillText('СПИСОК КАНАЛОВ:', 70, 375);
 
             const cols = 2;
             const colW = (W - 140) / cols;
-            const rowH = 46;
-            const startY = 370;
+            const rowH = 40;
+            const startY = 410;
 
             uiState.sources.forEach((s, i) => {
                 const col = i % cols;
@@ -300,28 +546,28 @@
                 const c = statusColor(s.status);
 
                 if (isCurrent) {
-                    ictx.fillStyle = 'rgba(120,200,255,0.10)';
+                    ictx.fillStyle = 'rgba(120,200,255,0.12)';
                     ictx.fillRect(x - 10, y - 6, colW - 20, rowH - 6);
                 }
 
                 ictx.beginPath();
                 ictx.fillStyle = c;
-                ictx.arc(x + 10, y + 14, 8, 0, Math.PI * 2);
+                ictx.arc(x + 10, y + 12, 7, 0, Math.PI * 2);
                 ictx.fill();
 
                 ictx.fillStyle = isCurrent ? '#ffffff' : '#aab6c8';
-                ictx.font = (isCurrent ? 'bold ' : '') + '22px Arial';
-                ictx.fillText(s.name, x + 32, y + 2);
+                ictx.font = (isCurrent ? 'bold ' : '') + '20px Arial';
+                ictx.fillText(s.name, x + 30, y);
 
                 ictx.fillStyle = c;
-                ictx.font = '18px Arial';
+                ictx.font = '16px Arial';
                 ictx.textAlign = 'right';
-                ictx.fillText(statusLabel(s.status), x + colW - 30, y + 4);
+                ictx.fillText(statusLabel(s.status), x + colW - 30, y + 2);
                 ictx.textAlign = 'left';
             });
 
-            const logTop = H - 200;
-            ictx.strokeStyle = 'rgba(120,200,255,0.2)';
+            const logTop = H - 175;
+            ictx.strokeStyle = 'rgba(120,200,255,0.25)';
             ictx.beginPath();
             ictx.moveTo(60, logTop - 15);
             ictx.lineTo(W - 60, logTop - 15);
@@ -331,16 +577,16 @@
             ictx.font = 'bold 22px Arial';
             ictx.fillText('ЖУРНАЛ СОБЫТИЙ:', 70, logTop - 5);
 
-            ictx.font = '20px monospace';
+            ictx.font = '18px monospace';
             uiState.log.forEach((line, i) => {
                 ictx.fillStyle = i === 0 ? '#e6f3ff' : `rgba(200,220,240,${0.85 - i * 0.12})`;
-                ictx.fillText(line, 70, logTop + 25 + i * 26);
+                ictx.fillText(line, 70, logTop + 25 + i * 24);
             });
 
             const barX = ((t * 220) % (W + 300)) - 150;
             const barGrad = ictx.createLinearGradient(barX - 150, 0, barX + 150, 0);
             barGrad.addColorStop(0, 'rgba(120,200,255,0)');
-            barGrad.addColorStop(0.5, 'rgba(120,200,255,0.10)');
+            barGrad.addColorStop(0.5, 'rgba(120,200,255,0.12)');
             barGrad.addColorStop(1, 'rgba(120,200,255,0)');
             ictx.fillStyle = barGrad;
             ictx.fillRect(0, 0, W, H);
@@ -353,57 +599,114 @@
         }
 
         // ============================================================
-        // 6. ВИДЕО ИСТОЧНИКИ — ПОЛНОСТЬЮ ЗАМЕНЕНЫ
+        // 9. КАНАЛЫ
         // ============================================================
-        const videoElement = document.getElementById('streamVideo');
-        videoElement.muted = true;
-        videoElement.playsInline = true;
-        videoElement.loop = true;
-        videoElement.crossOrigin = 'anonymous';
-
         const playHint = document.getElementById('playHint');
-        const statusEl = document.getElementById('status');
-        const sourceListEl = document.getElementById('sourceList');
+        const menuToggle = document.getElementById('menuToggle');
+        const menuClose = document.getElementById('menuClose');
+        const channelMenu = document.getElementById('channelMenu');
+        const channelList = document.getElementById('channelList');
+        const menuOverlay = document.getElementById('menuOverlay');
 
-        // Все источники проверены: отдают Access-Control-Allow-Origin: *
         const sources = [
-            // --- MP4 (CORS: Google Storage отдаёт Access-Control-Allow-Origin: *) ---
-            { type: 'mp4', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', name: 'Big Buck Bunny (MP4)' },
-            { type: 'mp4', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4', name: 'Elephants Dream (MP4)' },
-            { type: 'mp4', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4', name: 'Sintel (MP4)' },
-            { type: 'mp4', url: 'https://mdn.github.io/shared-assets/videos/flower.mp4', name: 'MDN Flower (MP4)' },
-            // --- HLS (CORS: Mux, Unified Streaming, Akamai, Apple — все отдают CORS) ---
-            { type: 'hls', url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8', name: 'Big Buck Bunny 4K (HLS)' },
-            { type: 'hls', url: 'https://test-streams.mux.dev/pts_shift/master.m3u8', name: 'Mux PTS Shift (HLS)' },
-            { type: 'hls', url: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8', name: 'Tears of Steel 4K (HLS)' },
-            { type: 'hls', url: 'https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8', name: 'Sintel Akamai (HLS)' },
-            { type: 'hls', url: 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', name: 'Apple Bipbop (HLS)' },
-            { type: 'hls', url: 'https://ireplay.tv/test/blender.m3u8', name: 'Blender Open Movies 24/7 (HLS)' }
+            // === ФЕДЕРАЛЬНЫЕ ===
+            { type: 'hls', url: 'http://s14131.cdn.ngenix.net/hls/CH_R41_OTT_DV_KAM_1TV/variant.m3u8', name: 'Первый канал' },
+            { type: 'hls', url: 'http://zabava-htlive.cdn.ngenix.net/hls/CH_RUSSIA1/variant.m3u8', name: 'Россия 1' },
+            { type: 'hls', url: 'http://zabava-htlive.cdn.ngenix.net/hls/CH_NTV/variant.m3u8', name: 'НТВ' },
+            { type: 'hls', url: 'https://zabava-htlive.cdn.ngenix.net/hls/CH_RUSSIA24/variant.m3u8', name: 'Россия 24' },
+            { type: 'hls', url: 'http://ad-hls-rentv.cdnvideo.ru/ren/smil:ren.smil/playlist.m3u8', name: 'РЕН ТВ' },
+            { type: 'hls', url: 'https://tvchannelstream1.tvzvezda.ru/cdn/tvzvezda/playlist_hdhigh.m3u8', name: 'Звезда' },
+            { type: 'hls', url: 'https://vgtrkregion-reg.cdnvideo.ru/vgtrk/0/kultura-hd/index.m3u8', name: 'Россия Культура' },
+            { type: 'hls', url: 'https://stream.smotrim.ru/hls/karusel/playlist_3.m3u8', name: 'Карусель' },
+            { type: 'hls', url: 'http://194.152.35.17/tv-3/index.m3u8', name: 'ТВ-3' },
+            { type: 'hls', url: 'http://185.78.112.47:8077/Pyatnica/index.m3u8', name: 'Пятница!' },
+            { type: 'hls', url: 'http://185.78.112.47:8077/sts_hd/index.m3u8', name: 'СТС' },
+            { type: 'hls', url: 'https://bl.uma.media/live/317850/HLS/4614144_3/2/1/playlist.m3u8', name: 'ТНТ' },
+            { type: 'hls', url: 'http://s06.wsbof.com:8080/s/825dd1f7/tv3.m3u8', name: 'ТВ-3 (альт.)' },
+            { type: 'hls', url: 'http://185.78.112.47:8077/sts_kids/index.m3u8', name: 'СТС Kids' },
+            { type: 'hls', url: 'https://vgtrkregion-reg.cdnvideo.ru/vgtrk/0/russia1-hd/index.m3u8', name: 'Россия 1 HD' },
+            { type: 'hls', url: 'https://vgtrkregion-reg.cdnvideo.ru/vgtrk/0/russia24-hd/index.m3u8', name: 'Россия 24 HD' },
+            { type: 'hls', url: 'http://185.78.112.47:8077/karusel/index.m3u8', name: 'Карусель (альт.)' },
+            { type: 'hls', url: 'http://myott.top/stream/DT6QU63K5VX/229.m3u8', name: 'Культура (альт.)' },
+            { type: 'hls', url: 'http://myott.top/stream/DT6QU63K5VX/136.m3u8', name: 'ТВ3 Россия HD' }
         ];
+
+        function buildChannelMenu() {
+            channelList.innerHTML = '';
+            sources.forEach((src, i) => {
+                const item = document.createElement('div');
+                item.className = 'channelItem' + (i === currentIndex ? ' active' : '');
+                item.dataset.index = i;
+
+                const dot = document.createElement('span');
+                dot.className = 'statusDot';
+
+                const name = document.createElement('span');
+                name.className = 'channelName';
+                name.textContent = src.name;
+
+                const type = document.createElement('span');
+                type.className = 'channelType';
+                type.textContent = src.type.toUpperCase();
+
+                item.appendChild(dot);
+                item.appendChild(name);
+                item.appendChild(type);
+
+                item.addEventListener('click', () => {
+                    if (i === currentIndex && isLoaded) {
+                        closeMenu();
+                        return;
+                    }
+                    loadSource(i);
+                    closeMenu();
+                });
+
+                channelList.appendChild(item);
+            });
+        }
+
+        function updateMenuStatus() {
+            const items = channelList.querySelectorAll('.channelItem');
+            items.forEach(item => {
+                const i = Number(item.dataset.index);
+                item.classList.toggle('active', i === currentIndex);
+                item.classList.remove('ok', 'fail', 'loading');
+                const status = uiState.sources[i] ? uiState.sources[i].status : 'waiting';
+                if (status === 'ready' || status === 'playing') item.classList.add('ok');
+                else if (status === 'failed') item.classList.add('fail');
+                else if (status === 'loading') item.classList.add('loading');
+            });
+        }
+
+        function openMenu() {
+            channelMenu.classList.add('open');
+            menuOverlay.classList.add('show');
+        }
+
+        function closeMenu() {
+            channelMenu.classList.remove('open');
+            menuOverlay.classList.remove('show');
+        }
+
+        menuToggle.addEventListener('click', openMenu);
+        menuClose.addEventListener('click', closeMenu);
+        menuOverlay.addEventListener('click', closeMenu);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeMenu();
+        });
 
         uiState.sources = sources.map(s => ({ name: s.name, status: 'waiting' }));
 
-        const videoTexture = new THREE.VideoTexture(videoElement);
-        videoTexture.minFilter = THREE.LinearFilter;
-        videoTexture.magFilter = THREE.LinearFilter;
-        videoTexture.format = THREE.RGBAFormat;
-        videoTexture.generateMipmaps = false;
-        videoTexture.encoding = THREE.sRGBEncoding;
-
-        const screenMaterial = new THREE.MeshBasicMaterial({
-            map: infoTexture,
-            side: THREE.FrontSide,
-            toneMapped: false
-        });
-
-        const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(screenWidth, screenHeight), screenMaterial);
-        screenMesh.position.set(0, 5.5, 1.05);
-        scene.add(screenMesh);
-
+        // ============================================================
+        // 10. ЛОГИКА ЗАГРУЗКИ
+        // ============================================================
         let currentHls = null;
         let currentIndex = 0;
         let sourceLoadTimeout = null;
         let isLoaded = false;
+        let isPlayingVideo = false;
         let pendingHandlers = [];
 
         function detachPendingHandlers() {
@@ -422,54 +725,50 @@
             try { videoElement.load(); } catch (e) {}
         }
 
-        function updateActiveButton() {
-            const btns = sourceListEl.querySelectorAll('.srcBtn[data-index]');
-            btns.forEach(b => {
-                const i = Number(b.dataset.index);
-                b.classList.toggle('active', i === currentIndex);
-                b.classList.toggle('ok', uiState.sources[i] && uiState.sources[i].status === 'ready');
-                b.classList.toggle('fail', uiState.sources[i] && uiState.sources[i].status === 'failed');
-            });
-        }
-
-        function buildSourceButtons() {
-            sourceListEl.innerHTML = '';
-            sources.forEach((src, i) => {
-                const btn = document.createElement('button');
-                btn.className = 'srcBtn' + (i === currentIndex ? ' active' : '');
-                btn.dataset.index = i;
-                btn.textContent = src.name;
-                btn.addEventListener('click', () => {
-                    if (i === currentIndex && isLoaded) return;
-                    loadSource(i);
-                });
-                sourceListEl.appendChild(btn);
-            });
-
-            const nextBtn = document.createElement('button');
-            nextBtn.className = 'srcBtn';
-            nextBtn.textContent = '⏭ Далее';
-            nextBtn.addEventListener('click', () => loadSource(currentIndex + 1));
-            sourceListEl.appendChild(nextBtn);
-        }
-
         function markSource(index, status) {
             if (uiState.sources[index]) {
                 uiState.sources[index].status = status;
             }
-            updateActiveButton();
+            updateMenuStatus();
         }
 
-        function switchScreenToVideo() {
+        function showInfo() {
+            uiState.mode = 'info';
+            screenMaterial.map = infoTexture;
+            screenMaterial.needsUpdate = true;
+        }
+        function showVideo() {
             uiState.mode = 'video';
             screenMaterial.map = videoTexture;
             screenMaterial.needsUpdate = true;
         }
 
-        function switchScreenToInfo() {
-            uiState.mode = 'info';
-            screenMaterial.map = infoTexture;
-            screenMaterial.needsUpdate = true;
+        function tryPlay() {
+            if (soundEnabled && userInteracted) {
+                videoElement.muted = false;
+            } else if (!userInteracted) {
+                videoElement.muted = true;
+            }
+
+            const p = videoElement.play();
+            if (p && p.catch) {
+                p.catch(err => {
+                    console.warn('play() failed:', err.name);
+                    if (!videoElement.muted) {
+                        videoElement.muted = true;
+                        soundEnabled = false;
+                        updateSoundBtn();
+                        videoElement.play().catch(e2 => {
+                            console.warn('play() muted also failed:', e2.name);
+                            uiState.statusLine = 'Нажмите для запуска';
+                            playHint.classList.remove('hidden');
+                        });
+                    } else {
+                        uiState.statusLine = 'Нажмите для запуска';
+                        playHint.classList.remove('hidden');
+                    }
+                });
+            }
         }
 
         function loadSource(index) {
@@ -479,34 +778,32 @@
             }
 
             if (index >= sources.length) {
-                console.error('❌ Все источники недоступны.');
                 uiState.currentName = '—';
                 uiState.currentStatus = 'failed';
-                uiState.statusLine = 'Все источники недоступны. Смотрите список слева.';
-                pushLog('Все источники исчерпаны');
-                statusEl.textContent = 'Источник: нет доступных';
+                uiState.statusLine = 'Все каналы недоступны';
+                pushLog('❌ Все каналы исчерпаны');
                 isLoaded = false;
+                isPlayingVideo = false;
                 clearVideoElement();
-                switchScreenToInfo();
-                updateActiveButton();
+                showInfo();
+                updateMenuStatus();
                 return;
             }
 
             isLoaded = false;
+            isPlayingVideo = false;
             currentIndex = index;
             clearVideoElement();
-            switchScreenToInfo();
+            showInfo();
 
             const source = sources[index];
-            console.log(`\n[${index + 1}/${sources.length}] Загрузка: ${source.name}\n${source.url}`);
+            pushLog(`[${index + 1}/${sources.length}] Загрузка: ${source.name}`);
 
             uiState.currentName = source.name;
             uiState.currentStatus = 'loading';
-            uiState.statusLine = `Подключение к источнику #${index + 1} из ${sources.length}…`;
-            pushLog(`Начало загрузки: ${source.name}`);
-            statusEl.textContent = `Загрузка: ${source.name}…`;
+            uiState.statusLine = `Подключение к каналу #${index + 1} из ${sources.length}…`;
             markSource(index, 'loading');
-            updateActiveButton();
+            updateMenuStatus();
 
             const onReady = () => {
                 if (isLoaded) return;
@@ -518,24 +815,11 @@
                 }
                 detachPendingHandlers();
 
-                console.log(`✅ Готово: ${source.name}`);
+                pushLog(`✅ Данные получены: ${source.name}`);
                 uiState.currentStatus = 'ready';
-                uiState.statusLine = 'Источник готов, запускаю воспроизведение…';
-                pushLog(`Готово: ${source.name}`);
-                statusEl.textContent = `Источник: ${source.name}`;
+                uiState.statusLine = 'Канал готов, запускаю…';
                 markSource(index, 'ready');
-
-                switchScreenToVideo();
-
-                videoElement.play().then(() => {
-                    uiState.currentStatus = 'playing';
-                    uiState.statusLine = `Воспроизведение: ${source.name}`;
-                    pushLog(`Играет: ${source.name}`);
-                }).catch(err => {
-                    console.warn('Автовоспроизведение заблокировано:', err.name);
-                    uiState.statusLine = 'Нажмите для запуска воспроизведения';
-                    pushLog('Автозапуск заблокирован — нужен клик');
-                });
+                tryPlay();
             };
 
             const onMeta = () => onReady();
@@ -544,103 +828,126 @@
             videoElement.addEventListener('canplay', onCanPlay);
             pendingHandlers.push(['loadedmetadata', onMeta], ['canplay', onCanPlay]);
 
+            // ★ Таймаут источника увеличен с 18 до 36 секунд
             sourceLoadTimeout = setTimeout(() => {
                 sourceLoadTimeout = null;
                 if (!isLoaded) {
-                    console.warn(`⏱ Таймаут: ${source.name}`);
                     pushLog(`⏱ Таймаут: ${source.name}`);
                     markSource(index, 'failed');
                     loadSource(index + 1);
                 }
-            }, 20000);
+            }, 36000);
 
-            if (source.type === 'mp4') {
-                videoElement.src = source.url;
-                videoElement.load();
-
-            } else if (source.type === 'hls') {
+            if (source.type === 'hls') {
                 if (window.Hls && Hls.isSupported()) {
+                    // ★ Все таймауты HLS увеличены вдвое
                     const hls = new Hls({
-                        maxBufferLength: 12,
-                        manifestLoadingTimeOut: 15000,
-                        manifestLoadingMaxRetry: 1,
-                        levelLoadingTimeOut: 15000,
-                        levelLoadingMaxRetry: 1,
-                        fragLoadingTimeOut: 25000,
-                        fragLoadingMaxRetry: 1
+                        maxBufferLength: 20,
+                        maxMaxBufferLength: 40,
+                        manifestLoadingTimeOut: 30000,  // было 15000
+                        manifestLoadingMaxRetry: 2,
+                        levelLoadingTimeOut:    30000,  // было 15000
+                        levelLoadingMaxRetry:   2,
+                        fragLoadingTimeOut:     60000,  // было 30000
+                        fragLoadingMaxRetry:    3,
+                        enableWorker: true,
+                        lowLatencyMode: false
                     });
                     currentHls = hls;
 
                     hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                        console.log('HLS: манифест разобран, ждём фрагменты…');
-                        uiState.statusLine = 'Манифест разобран, буферизация…';
                         pushLog('HLS: манифест разобран');
+                        uiState.statusLine = 'Манифест разобран, буферизация…';
                     });
 
                     hls.on(Hls.Events.FRAG_LOADED, onReady);
 
                     hls.on(Hls.Events.ERROR, (event, data) => {
                         console.warn(`HLS: ${data.type} / ${data.details} (fatal=${data.fatal})`);
-                        if (data.fatal && !isLoaded) {
-                            pushLog(`HLS ошибка: ${data.details}`);
-                            markSource(index, 'failed');
-                            loadSource(index + 1);
+                        if (data.fatal) {
+                            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                                pushLog('HLS: сетевая ошибка, переключаюсь');
+                                markSource(index, 'failed');
+                                loadSource(index + 1);
+                            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                                pushLog('HLS: ошибка медиа, пробую восстановить');
+                                try { hls.recoverMediaError(); } catch (e) {
+                                    markSource(index, 'failed');
+                                    loadSource(index + 1);
+                                }
+                            } else {
+                                pushLog('HLS: fatal ошибка');
+                                markSource(index, 'failed');
+                                loadSource(index + 1);
+                            }
                         }
                     });
 
                     hls.loadSource(source.url);
                     hls.attachMedia(videoElement);
-
                 } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
                     videoElement.src = source.url;
                     videoElement.load();
                 } else {
-                    pushLog('HLS не поддерживается браузером');
+                    pushLog('HLS не поддерживается');
                     markSource(index, 'failed');
                     loadSource(index + 1);
                 }
             }
         }
 
-        videoElement.addEventListener('error', () => {
-            if (!videoElement.currentSrc) return;
-            console.error('Ошибка <video>:', videoElement.error);
-            const src = sources[currentIndex];
-            if (!isLoaded && src && src.type === 'mp4') {
-                pushLog(`Ошибка видео: ${src.name}`);
-                markSource(currentIndex, 'failed');
-                loadSource(currentIndex + 1);
+        videoElement.addEventListener('playing', () => {
+            isPlayingVideo = true;
+            playHint.classList.add('hidden');
+            uiState.currentStatus = 'playing';
+            uiState.statusLine = `▶ ${sources[currentIndex].name}`;
+            pushLog(`▶ Играет: ${sources[currentIndex].name}${videoElement.muted ? ' (без звука)' : ''}`);
+            markSource(currentIndex, 'ready');
+            showVideo();
+        });
+
+        videoElement.addEventListener('pause', () => {
+            if (isPlayingVideo) {
+                isPlayingVideo = false;
+                showInfo();
             }
+        });
+
+        videoElement.addEventListener('waiting', () => {
+            pushLog('Буферизация…');
+        });
+
+        videoElement.addEventListener('error', () => {
+            if (!videoElement.currentSrc && !currentHls) return;
+            const err = videoElement.error;
+            pushLog(`Ошибка <video>: ${err ? err.code : '?'}`);
         });
 
         document.addEventListener('click', () => {
-            if (videoElement.paused && videoElement.readyState >= 2) {
-                videoElement.play()
-                    .then(() => {
-                        playHint.classList.add('hidden');
-                        uiState.currentStatus = 'playing';
-                        uiState.statusLine = `Воспроизведение: ${sources[currentIndex].name}`;
-                    })
-                    .catch(e => console.warn('Ошибка запуска:', e));
+            if (!userInteracted) {
+                userInteracted = true;
+
+                if (!soundEnabled) {
+                    enableSound();
+                    volumeWrap.classList.add('show');
+                    // ★ Время показа панели громкости увеличено с 4 до 8 секунд
+                    setTimeout(() => volumeWrap.classList.remove('show'), 8000);
+                }
+
+                if (videoElement.paused && videoElement.readyState >= 2) {
+                    tryPlay();
+                }
             }
         });
 
-        videoElement.addEventListener('playing', () => {
-            playHint.classList.add('hidden');
-            uiState.currentStatus = 'playing';
-            uiState.statusLine = `Воспроизведение: ${sources[currentIndex].name}`;
-            statusEl.textContent = `Источник: ${sources[currentIndex].name}`;
-        });
-
-        buildSourceButtons();
+        buildChannelMenu();
         loadSource(0);
 
         // ============================================================
-        // 7. МАШИНЫ
+        // 11. МАШИНЫ
         // ============================================================
         function createCar(color, x, z, rotationY = 0) {
             const carGroup = new THREE.Group();
-
             const body = new THREE.Mesh(
                 new THREE.BoxGeometry(1.8, 0.6, 4.2),
                 new THREE.MeshStandardMaterial({ color: color, roughness: 0.4, metalness: 0.6 })
@@ -689,7 +996,7 @@
         });
 
         // ============================================================
-        // 8. ФОНАРИ, ЗВЁЗДЫ, ЛУНА
+        // 12. ФОНАРИ / ЗВЁЗДЫ / ЛУНА
         // ============================================================
         function createStreetLamp(x, z) {
             const lampGroup = new THREE.Group();
@@ -740,7 +1047,161 @@
         scene.add(moon);
 
         // ============================================================
-        // 9. АНИМАЦИЯ
+        // 12.5. ДЕРЕВЬЯ И КУСТЫ ПО КРАЯМ СЦЕНЫ
+        // ============================================================
+        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.95 });
+        const leafMatDeciduous = new THREE.MeshStandardMaterial({ color: 0x1e4a1e, roughness: 0.95 });
+        const leafMatFir = new THREE.MeshStandardMaterial({ color: 0x153515, roughness: 0.95 });
+
+        function createTree(x, z, scale = 1) {
+            const group = new THREE.Group();
+
+            const trunk = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.3, 0.45, 3, 6),
+                trunkMat
+            );
+            trunk.position.y = 1.5;
+            trunk.castShadow = true;
+            trunk.receiveShadow = true;
+            group.add(trunk);
+
+            const leaf1 = new THREE.Mesh(new THREE.SphereGeometry(1.8, 8, 6), leafMatDeciduous);
+            leaf1.position.y = 3.8; leaf1.castShadow = true; group.add(leaf1);
+
+            const leaf2 = new THREE.Mesh(new THREE.SphereGeometry(1.4, 8, 6), leafMatDeciduous);
+            leaf2.position.set(0.7, 4.6, 0.3); leaf2.castShadow = true; group.add(leaf2);
+
+            const leaf3 = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 6), leafMatDeciduous);
+            leaf3.position.set(-0.6, 4.9, -0.4); leaf3.castShadow = true; group.add(leaf3);
+
+            group.position.set(x, 0, z);
+            group.scale.setScalar(scale);
+            group.rotation.y = Math.random() * Math.PI * 2;
+            return group;
+        }
+
+        function createFir(x, z, scale = 1) {
+            const group = new THREE.Group();
+
+            const trunk = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.25, 0.4, 2, 6),
+                trunkMat
+            );
+            trunk.position.y = 1;
+            trunk.castShadow = true;
+            group.add(trunk);
+
+            const levels = [
+                { r: 2.0, h: 2.5, y: 2.6 },
+                { r: 1.5, h: 2.0, y: 4.1 },
+                { r: 1.0, h: 1.6, y: 5.3 }
+            ];
+            levels.forEach(l => {
+                const cone = new THREE.Mesh(new THREE.ConeGeometry(l.r, l.h, 8), leafMatFir);
+                cone.position.y = l.y;
+                cone.castShadow = true;
+                group.add(cone);
+            });
+
+            group.position.set(x, 0, z);
+            group.scale.setScalar(scale);
+            group.rotation.y = Math.random() * Math.PI * 2;
+            return group;
+        }
+
+        function createBush(x, z, scale = 1) {
+            const group = new THREE.Group();
+            const spheres = [
+                { r: 0.9, x: 0,    y: 0.8, z: 0 },
+                { r: 0.7, x: 0.7,  y: 0.7, z: 0.2 },
+                { r: 0.6, x: -0.5, y: 0.6, z: 0.5 },
+                { r: 0.5, x: 0.2,  y: 0.9, z: -0.6 }
+            ];
+            spheres.forEach(s => {
+                const m = new THREE.Mesh(new THREE.SphereGeometry(s.r, 6, 5), leafMatDeciduous);
+                m.position.set(s.x, s.y, s.z);
+                m.castShadow = true;
+                m.receiveShadow = true;
+                group.add(m);
+            });
+
+            group.position.set(x, 0, z);
+            group.scale.setScalar(scale);
+            group.rotation.y = Math.random() * Math.PI * 2;
+            return group;
+        }
+
+        const treePositions = [
+            // За экраном (задний фон)
+            [-26, -18, 1.3, 'fir'], [-18, -23, 1.1, 'fir'],
+            [-10, -26, 1.4, 'fir'], [-2,  -29, 1.2, 'broad'],
+            [6,   -26, 1.3, 'fir'], [14,  -23, 1.0, 'broad'],
+            [22,  -21, 1.2, 'fir'], [30,  -16, 1.1, 'broad'],
+
+            // Левая сторона
+            [-30, -10, 1.2, 'broad'], [-33, -2, 1.4, 'fir'],
+            [-35,  8,  1.1, 'broad'], [-32, 16, 1.3, 'fir'],
+            [-30,  24, 1.0, 'broad'], [-28, 32, 1.2, 'fir'],
+
+            // Правая сторона
+            [30,  -10, 1.3, 'broad'], [33, -2,  1.1, 'fir'],
+            [35,   8,  1.4, 'broad'], [32, 16,  1.2, 'fir'],
+            [30,   24, 1.1, 'broad'], [28, 32,  1.3, 'fir'],
+
+            // Позади камеры
+            [-22, 36, 1.2, 'broad'], [-12, 38, 1.0, 'fir'],
+            [0,   40, 1.3, 'broad'], [12,  38, 1.1, 'fir'],
+            [22,  36, 1.2, 'broad']
+        ];
+
+        treePositions.forEach(([x, z, s, type]) => {
+            if (type === 'fir') scene.add(createFir(x, z, s));
+            else scene.add(createTree(x, z, s));
+        });
+
+        const bushPositions = [
+            [-22, -15, 1.0], [-15, -20, 0.9], [-7, -23, 1.1], [1, -26, 0.8],
+            [10, -22, 1.0], [18, -19, 0.9], [26, -17, 1.1],
+            [-27, -6, 1.0], [-28, 4, 0.9], [-27, 12, 1.1], [-26, 20, 1.0], [-25, 28, 0.9],
+            [27, -6, 1.1], [28, 4, 1.0], [27, 12, 0.9], [26, 20, 1.1], [25, 28, 1.0],
+            [-18, 34, 0.9], [-6, 36, 1.1], [6, 37, 1.0], [18, 34, 1.1]
+        ];
+
+        bushPositions.forEach(([x, z, s]) => {
+            scene.add(createBush(x, z, s));
+        });
+
+        // ============================================================
+        // 13. АДАПТАЦИЯ ПОД ПОВОРОТ ЭКРАНА
+        // ============================================================
+        function resizeRenderer() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            if (w === 0 || h === 0) return;
+
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(w, h);
+        }
+
+        window.addEventListener('resize', resizeRenderer);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(resizeRenderer, 50);
+            setTimeout(resizeRenderer, 150);
+            setTimeout(resizeRenderer, 400);
+        });
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', resizeRenderer);
+            window.visualViewport.addEventListener('scroll', resizeRenderer);
+        }
+
+        let lastW = window.innerWidth;
+        let lastH = window.innerHeight;
+
+        // ============================================================
+        // 14. АНИМАЦИЯ
         // ============================================================
         let clockTime = 0;
 
@@ -748,9 +1209,12 @@
             requestAnimationFrame(animate);
             clockTime += 0.016;
 
-            if (!videoElement.paused &&
-                videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
-                videoTexture.needsUpdate = true;
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            if (w !== lastW || h !== lastH) {
+                lastW = w;
+                lastH = h;
+                resizeRenderer();
             }
 
             if (uiState.mode === 'info') {
@@ -759,17 +1223,16 @@
                 infoTexture.needsUpdate = true;
             }
 
+            if (uiState.mode === 'video' && !videoElement.paused &&
+                videoElement.readyState >= 2) {
+                videoTexture.needsUpdate = true;
+            }
+
             screenGlow.intensity = 1.0 + Math.sin(Date.now() * 0.002) * 0.15;
             controls.update();
             renderer.render(scene, camera);
         }
         animate();
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
     </script>
 </body>
 </html>
