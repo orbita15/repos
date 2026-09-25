@@ -3,50 +3,53 @@
 const sources = [
 
   // ============================================
-  // 20 видео Rutube (iframe)
+  // Российские каналы (HLS)
   // ============================================
-  { type: "iframe", url: "https://rutube.ru/play/embed/caafe83ff1c6ed38d394635b83ece578/", name: "Rutube: пример 1" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/7716bd3e665725c3c008ae7ab4ff02e2/", name: "Rutube: пример 2" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/9345f034c87f70acf921f5f22a7506ac/", name: "Rutube: пример 3" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/2fbeeb29d70119c30125d74ba0adcfe6/", name: "Rutube: пример 4" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/2bc3a7c159051e7629ffa0ab0a7155a6/", name: "Rutube: пример 5" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/34e8e458ca8b90c915d78f9881330596/", name: "Rutube: пример 6" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/515553734eeeab1f959bdaf0d3700ff2/", name: "Rutube: пример 7" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/858edaebb31e5a9346abf81f32efc758/", name: "Rutube: пример 8" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/11efd0115551fdd293c31ee691dxxx2e/", name: "Rutube: пример 9" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/babf94efe741b7e3e9a352675693046a/", name: "Rutube: пример 10" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/0d2a0afb5972b5ba85153346040acc19/", name: "Rutube: пример 11" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/dd5387660356c4f6b1ff1208d33a5f2e/", name: "Rutube: пример 12" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/515553734eeeab1f959bdaf0d3700ff2/", name: "Rutube: пример 13" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/caafe83ff1c6ed38d394635b83ece578/?p=IBgzQQrKH4qB1bqm_91x7Q", name: "Rutube: пример 14" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/7716bd3e665725c3c008ae7ab4ff02e2/?getPlayOptions=pg_rating,is_adult&skinColor=7cb342&t=6040", name: "Rutube: пример 15" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/9345f034c87f70acf921f5f22a7506ac/", name: "Rutube: пример 16" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/2fbeeb29d70119c30125d74ba0adcfe6/", name: "Rutube: пример 17" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/2bc3a7c159051e7629ffa0ab0a7155a6/", name: "Rutube: пример 18" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/34e8e458ca8b90c915d78f9881330596/", name: "Rutube: пример 19" },
-  { type: "iframe", url: "https://rutube.ru/play/embed/858edaebb31e5a9346abf81f32efc758/", name: "Rutube: пример 20" },
+  { type: "hls", url: "http://tvchannelstream1.tvzvezda.ru/cdn/tvzvezda/playlist_hdhigh.m3u8", name: "Звезда HD" },
+  { type: "hls", url: "https://vgtrkregion-reg.cdnvideo.ru/vgtrk/0/russia24-hd/index.m3u8", name: "Россия 24 HD" },
 
   // ============================================
-  // 20 китайских каналов (HLS / m3u8)
+  // 30 японских каналов (HLS / m3u8)
   // ============================================
-  { type: "hls", url: "http://182.140.125.47:808/hls/1/index.m3u8", name: "CCTV-1 综合" },
-  { type: "hls", url: "http://74.91.26.218:82/live/cctv1hd.m3u8", name: "CCTV-1 (720p)" },
-  { type: "hls", url: "http://74.91.26.218:82/live/cctv2hd.m3u8", name: "CCTV-2 财经" },
-  { type: "hls", url: "http://121.24.98.226:8090/hls/9/index.m3u8", name: "CCTV-1 综合 (江苏源)" },
-  { type: "hls", url: "http://121.24.98.226:8090/hls/38/index.m3u8", name: "江苏卫视" },
-  { type: "hls", url: "https://0472.org/hls/cgtn.m3u8", name: "CGTN 英语" },
-  { type: "hls", url: "https://0472.org/hls/cgtnd.m3u8", name: "CGTN 纪录" },
-  { type: "hls", url: "https://0472.org/hls/cgtnx.m3u8", name: "CGTN 西语" },
-  { type: "hls", url: "https://0472.org/hls/cgtnf.m3u8", name: "CGTN 法语" },
-  { type: "hls", url: "https://0472.org/hls/cgtna.m3u8", name: "CGTN 阿语" },
-  { type: "hls", url: "https://0472.org/hls/cgtne.m3u8", name: "CGTN 俄语" },
-  { type: "hls", url: "https://global.cgtn.cicc.media.caton.cloud/master/cgtn-espanol.m3u8", name: "CGTN Español" },
-  { type: "hls", url: "https://amg01314-cgtn-amg01314c2-rakuten-us-1319.playouts.now.amagi.tv/cgtn-fr-rakuten/playlist.m3u8", name: "CGTN Français" },
-  { type: "hls", url: "https://english-livetx.cgtn.com/hls/yypdjlctzb_hd.m3u8", name: "CGTN Documentary" },
-  { type: "hls", url: "https://live.funhillrm.com/5/sd/live.m3u8", name: "北京新闻" },
-  { type: "hls", url: "https://stream.hrbtv.net/shpd/sd/live.m3u8", name: "哈尔滨生活" },
-  { type: "hls", url: "https://stream.hrbtv.net/xwzh/sd/live.m3u8", name: "哈尔滨新闻综合" },
-  { type: "hls", url: "http://61.244.22.5/ch3/ch3.live/chunklist_w1228316132.m3u8", name: "澳门卫视" },
-  { type: "hls", url: "http://38.64.72.148/hls/modn/list/2015/chunklist0.m3u8", name: "东森新闻美洲台" },
-  { type: "hls", url: "http://38.64.72.148/hls/modn/list/4013/playlist.m3u8", name: "台视新闻" },
+
+  // --- Токио (эфирные) ---
+  { type: "hls", url: "http://tsb-mega.i9.ee/stream/nhkg_avc_1080p|user-agent=VLC", name: "NHK G (総合)" },
+  { type: "hls", url: "http://58.82.168.138:5002/hdgd02.m3u8?token=guoziyun&gid=hdgd02&channel=zhongying|user-agent=VLC", name: "NHK E (教育)" },
+  { type: "hls", url: "http://58.82.168.138:5002/hdgd03.m3u8?token=guoziyun&gid=hdgd03&channel=zhongying|user-agent=VLC", name: "NTV (日本テレビ)" },
+  { type: "hls", url: "http://58.82.168.138:5002/hdgd06.m3u8?token=guoziyun&gid=hdgd06&channel=zhongying|user-agent=VLC", name: "TV Asahi (テレビ朝日)" },
+  { type: "hls", url: "http://58.82.168.138:5002/hdgd04.m3u8?token=guoziyun&gid=hdgd04&channel=zhongying|user-agent=VLC", name: "TBS" },
+  { type: "hls", url: "http://58.82.168.138:5002/hdgd05.m3u8?token=guoziyun&gid=hdgd05&channel=zhongying|user-agent=VLC", name: "Fuji TV (フジテレビ)" },
+  { type: "hls", url: "http://58.82.168.138:5002/hdgd07.m3u8?token=guoziyun&gid=hdgd07&channel=zhongying|user-agent=VLC", name: "TV Tokyo (テレビ東京)" },
+  { type: "hls", url: "http://58.82.168.138:5002/hdgd08.m3u8?token=guoziyun&gid=hdgd08&channel=zhongying|user-agent=VLC", name: "TOKYO MX1" },
+
+  // --- Кансай (эфирные) ---
+  { type: "hls", url: "https://nl.utako.moe/Tokyo_MX2/index.m3u8", name: "TOKYO MX2" },
+  { type: "hls", url: "https://nl.utako.moe/TBS/index.m3u8", name: "TBS (utako)" },
+  { type: "hls", url: "https://nl.utako.moe/TV_Tokyo/index.m3u8", name: "TV Tokyo (utako)" },
+  { type: "hls", url: "https://fujitv4.mov3.co/hls/fujitv.m3u8", name: "Fuji TV (mov3)" },
+  { type: "hls", url: "https://ntv5.mov3.co/hls/ntv.m3u8", name: "Nippon TV (mov3)" },
+  { type: "hls", url: "https://akariko.netgenx.site/stream/jp/tv_tokyo/stream-output.m3u8?mode=hls", name: "TV Tokyo (netgenx)" },
+  { type: "hls", url: "https://akariko.netgenx.site/stream/jp/fuji_tv/stream-output.m3u8?mode=hls", name: "Fuji TV (netgenx)" },
+
+  // --- NHK World / международные ---
+  { type: "hls", url: "https://nhkwlive-ojp.akamaized.net/hls/live/2003459/nhkwlive-ojp-en/index_4M.m3u8", name: "NHK World Japan" },
+  { type: "hls", url: "https://masterpl.hls.nhkworld.jp/hls/w/live/smarttv.m3u8", name: "NHK World Japan (smart)" },
+  { type: "hls", url: "https://media-tyo.hls.nhkworld.jp/hls/w/live/master.m3u8", name: "NHK World Japan (720p)" },
+  { type: "hls", url: "https://cdn.nhkworld.jp/www11/nhkworld-tv/pre/hlscomp.m3u8", name: "NHK World Premium" },
+  { type: "hls", url: "https://newssimul-stream.nhk.jp/hls/live/2010561/nhknewssimul/master.m3u8", name: "NHK Kishou Saigai" },
+
+  // --- BS (спутниковые) ---
+  { type: "hls", url: "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs11", name: "NHK BS" },
+  { type: "hls", url: "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs04", name: "BS TBS" },
+  { type: "hls", url: "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs03", name: "BS Asahi" },
+  { type: "hls", url: "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs05", name: "BS Fuji" },
+  { type: "hls", url: "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs07", name: "BS TV Tokyo" },
+  { type: "hls", url: "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs02", name: "BS NTV" },
+
+  // --- CS / тематические ---
+  { type: "hls", url: "http://202.60.106.14:8080/1335/playlist.m3u8", name: "Golf Network" },
+  { type: "hls", url: "https://d2p4mrcwl6ly4.cloudfront.net/out/v1/8d50f69fdbbf411a8d302743e4263716/CGNWebLiveJP.m3u8", name: "CGNTV Japan" },
+  { type: "hls", url: "https://tbs5.mov3.co/hls/tbs.m3u8", name: "TBS (mov3)" },
+  { type: "hls", url: "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd02", name: "JOAB-DTV (NHK E альт.)" },
+
 ];
