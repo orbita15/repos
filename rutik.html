@@ -272,12 +272,6 @@
         </div>
 
         <div class="vcRow">
-            <button class="vcBtn" id="vcVolDown"   title="Тише">🔉</button>
-            <button class="vcBtn" id="vcMute"      title="Mute">🔇</button>
-            <button class="vcBtn" id="vcVolUp"     title="Громче">🔊</button>
-        </div>
-
-        <div class="vcRow">
             <button class="vcBtn primary" id="vcFullscreen" title="Fullscreen">⛶</button>
             <button class="vcBtn danger"  id="vcClose"      title="Закрыть управление">✕</button>
         </div>
@@ -301,7 +295,6 @@
     <script>
     // ============================================================
     // ГЛАВНЫЙ СКРИПТ ПЛЕЕРА
-    // Зависит от: THREE, PARKING_SCENE (scene.js), Hls
     // ============================================================
     (function () {
         'use strict';
@@ -335,7 +328,7 @@
         const playHint      = document.getElementById('playHint');
 
         // --------------------------------------------------------
-        // ЗВУК (только для HLS-режима)
+        // ЗВУК (только для HLS, глобальная кнопка вверху справа)
         // --------------------------------------------------------
         let soundEnabled = false;
         let userInteracted = false;
@@ -399,7 +392,7 @@
         updateSoundBtn();
 
         // --------------------------------------------------------
-        // ТЕКСТУРЫ ЭКРАНА (устанавливаются в PARKING_SCENE)
+        // ТЕКСТУРЫ ЭКРАНА
         // --------------------------------------------------------
         const videoTexture = new THREE.VideoTexture(videoElement);
         videoTexture.minFilter = THREE.LinearFilter;
@@ -422,7 +415,7 @@
         screenMaterial.needsUpdate = true;
 
         // --------------------------------------------------------
-        // СОСТОЯНИЕ UI
+        // СОСТОЯНИЕ
         // --------------------------------------------------------
         const uiState = {
             title: 'УЛИЧНЫЙ КИНОТЕАТР',
@@ -625,8 +618,6 @@
         const menuOverlay = document.getElementById('menuOverlay');
 
         let sources = [];
-        let iframeCount = 0;
-        let rusCount = 0;
         let currentIndex = 0;
 
         async function loadSourcesFromFile() {
@@ -643,14 +634,6 @@
                 });
                 sources = flat;
 
-                // Считаем количество iframe-каналов для заголовков групп
-                iframeCount = 0;
-                rusCount = 0;
-                for (let i = 0; i < sources.length; i++) {
-                    if (sources[i].type === 'iframe') iframeCount++;
-                    else if (sources[i].group && sources[i].group.indexOf('Российские') !== -1) rusCount++;
-                }
-
                 uiState.sources = sources.map(s => ({ name: s.name, status: 'waiting' }));
                 buildChannelMenu();
                 pushLog(`✅ Загружено каналов: ${sources.length}`);
@@ -659,7 +642,6 @@
                 console.error('Не удалось загрузить sources.json:', e);
                 pushLog('❌ sources.json не загружен: ' + e.message);
                 uiState.statusLine = 'Ошибка загрузки sources.json';
-                // Резервный канал
                 sources = [
                     { type: 'iframe', url: 'https://rutube.ru/play/embed/20872670', name: 'Rutube (по умолчанию)' }
                 ];
@@ -764,7 +746,6 @@
             iframe.style.height = IFRAME_H + 'px';
             iframe.style.border = 'none';
             iframe.style.background = '#000';
-            // ★ iframe НЕ перехватывает клики. Управляем через кнопки.
             iframe.style.pointerEvents = 'none';
             iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
             iframe.setAttribute('allowfullscreen', 'true');
@@ -812,9 +793,6 @@
             videoControls.classList.remove('show');
         }
 
-        // ★ Управление — это просто показать панель кнопок.
-        // Camera НЕ блокируется, iframe НЕ становится кликабельным.
-        // Управление видео идёт только через HTML-кнопки.
         manageBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (!currentIframe) return;
@@ -861,18 +839,23 @@
         // --------------------------------------------------------
         // ОТПРАВКА КОМАНД В RUTUBE
         // --------------------------------------------------------
-        function sendRutube(command, data) {
-            if (!currentIframe || !currentIframe.contentWindow) return false;
-            const msg = data
-                ? JSON.stringify({ type: command, data: data })
-                : JSON.stringify({ type: command });
+        function rutubePost(command, data) {
+            if (!currentIframe || !currentIframe.contentWindow) return;
+            const payload = data
+                ? { type: command, data: data }
+                : { type: command };
             try {
-                currentIframe.contentWindow.postMessage(msg, '*');
-                return true;
+                currentIframe.contentWindow.postMessage(JSON.stringify(payload), '*');
             } catch (e) {
-                console.warn('postMessage error:', e);
-                return false;
+                console.warn('postMessage failed:', e);
             }
+        }
+
+        function rutubePostRaw(cmd) {
+            if (!currentIframe || !currentIframe.contentWindow) return;
+            try {
+                currentIframe.contentWindow.postMessage(cmd, '*');
+            } catch (e) {}
         }
 
         // --------------------------------------------------------
@@ -995,7 +978,6 @@
                 return;
             }
 
-            // HLS / MP4
             showInfo();
 
             const onReady = () => {
@@ -1132,35 +1114,10 @@
         });
 
         // --------------------------------------------------------
-        // КНОПКИ УПРАВЛЕНИЯ ВИДЕО — РАБОЧИЕ
+        // КНОПКИ УПРАВЛЕНИЯ ВИДЕО
+        // Осталось: Play / Pause / Stop / ±10 сек / Fullscreen / Закрыть
         // --------------------------------------------------------
-        // Для HLS: работаем с videoElement напрямую
-        // Для Rutube: postMessage API + прямое управление iframe-плеером
 
-        // Универсальная отправка любого сообщения в iframe
-        function rutubePost(command, data) {
-            if (!currentIframe || !currentIframe.contentWindow) return;
-            const payload = data
-                ? { type: command, data: data }
-                : { type: command };
-            try {
-                currentIframe.contentWindow.postMessage(JSON.stringify(payload), '*');
-            } catch (e) {
-                console.warn('postMessage failed:', e);
-            }
-        }
-
-        // Дополнительно: пробуем дотянуться до Rutube-плеера напрямую
-        // через его глобальный объект (если он есть в iframe — не сработает
-        // из-за cross-origin, но попытка безопасна).
-        function rutubePostRaw(cmd) {
-            if (!currentIframe || !currentIframe.contentWindow) return;
-            try {
-                currentIframe.contentWindow.postMessage(cmd, '*');
-            } catch (e) {}
-        }
-
-        // ---------- PLAY ----------
         document.getElementById('vcPlay').addEventListener('click', () => {
             if (uiState.mode === 'video') {
                 videoElement.play().catch(() => {});
@@ -1172,7 +1129,6 @@
             }
         });
 
-        // ---------- PAUSE ----------
         document.getElementById('vcPause').addEventListener('click', () => {
             if (uiState.mode === 'video') {
                 videoElement.pause();
@@ -1184,7 +1140,6 @@
             }
         });
 
-        // ---------- STOP ----------
         document.getElementById('vcStop').addEventListener('click', () => {
             if (uiState.mode === 'video') {
                 videoElement.pause();
@@ -1197,20 +1152,17 @@
             }
         });
 
-        // ---------- -10 сек ----------
         document.getElementById('vcBack10').addEventListener('click', () => {
             if (uiState.mode === 'video') {
                 videoElement.currentTime = Math.max(0, videoElement.currentTime - 10);
                 pushLog('⏪ HLS -10 сек');
             } else {
-                // Rutube: и relativeSeek, и setTime — отправляем оба
                 rutubePost('player:relativeSeek', { time: -10 });
                 rutubePost('player:seek', { time: -10 });
                 pushLog('⏪ Rutube -10 сек');
             }
         });
 
-        // ---------- +10 сек ----------
         document.getElementById('vcFwd10').addEventListener('click', () => {
             if (uiState.mode === 'video') {
                 videoElement.currentTime = Math.min(videoElement.duration || 0, videoElement.currentTime + 10);
@@ -1222,60 +1174,6 @@
             }
         });
 
-        // ---------- ТИШЕ ----------
-        document.getElementById('vcVolDown').addEventListener('click', () => {
-            if (uiState.mode === 'video') {
-                videoElement.volume = Math.max(0, videoElement.volume - 0.1);
-                volumeSlider.value = videoElement.volume;
-                volumeVal.textContent = Math.round(videoElement.volume * 100) + '%';
-                pushLog('🔉 HLS Тише');
-            } else {
-                // Rutube: setVolume принимает volume 0..100
-                // Читаем текущее значение из слайдера и уменьшаем на 10
-                const cur = parseFloat(volumeSlider.value) * 100;
-                const next = Math.max(0, cur - 10);
-                volumeSlider.value = next / 100;
-                volumeVal.textContent = Math.round(next) + '%';
-                rutubePost('player:setVolume', { volume: next });
-                rutubePostRaw('volume:' + Math.round(next));
-                pushLog('🔉 Rutube Тише → ' + Math.round(next) + '%');
-            }
-        });
-
-        // ---------- ГРОМЧЕ ----------
-        document.getElementById('vcVolUp').addEventListener('click', () => {
-            if (uiState.mode === 'video') {
-                videoElement.volume = Math.min(1, videoElement.volume + 0.1);
-                volumeSlider.value = videoElement.volume;
-                volumeVal.textContent = Math.round(videoElement.volume * 100) + '%';
-                pushLog('🔊 HLS Громче');
-            } else {
-                const cur = parseFloat(volumeSlider.value) * 100;
-                const next = Math.min(100, cur + 10);
-                volumeSlider.value = next / 100;
-                volumeVal.textContent = Math.round(next) + '%';
-                rutubePost('player:setVolume', { volume: next });
-                rutubePostRaw('volume:' + Math.round(next));
-                pushLog('🔊 Rutube Громче → ' + Math.round(next) + '%');
-            }
-        });
-
-        // ---------- MUTE ----------
-        document.getElementById('vcMute').addEventListener('click', () => {
-            if (uiState.mode === 'video') {
-                if (soundEnabled) disableSound(); else enableSound();
-                pushLog('🔇 HLS Mute toggle');
-            } else {
-                rutubePost('player:mute');
-                rutubePost('player:unMute');
-                rutubePostRaw('mute');
-                pushLog('🔇 Rutube Mute');
-            }
-        });
-
-        // ---------- FULLSCREEN ----------
-        // Разворачиваем на весь экран весь контейнер со сценой и iframe,
-        // а не только <html>. Это корректно работает и для CSS3D-слоя.
         document.getElementById('vcFullscreen').addEventListener('click', () => {
             const target = document.body;
             if (!document.fullscreenElement) {
@@ -1291,15 +1189,9 @@
             }
         });
 
-        // При выходе из fullscreen тоже обновляем размер
-        document.addEventListener('fullscreenchange', () => {
-            setTimeout(resizeScene, 100);
-        });
-        document.addEventListener('webkitfullscreenchange', () => {
-            setTimeout(resizeScene, 100);
-        });
+        document.addEventListener('fullscreenchange', () => setTimeout(resizeScene, 100));
+        document.addEventListener('webkitfullscreenchange', () => setTimeout(resizeScene, 100));
 
-        // ---------- ЗАКРЫТЬ УПРАВЛЕНИЕ ----------
         document.getElementById('vcClose').addEventListener('click', () => {
             videoControls.classList.remove('show');
             manageBtn.classList.remove('active');
