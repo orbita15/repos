@@ -2,12 +2,16 @@
 // sources.js — список каналов
 // ============================================================
 
-window.SOURCES = [
-    { type: 'iframe', url: 'https://rutube.ru/play/embed/10732741', name: 'Rutube: пример 1' },
-    { type: 'iframe', url: 'https://rutube.ru/play/embed/20872670', name: 'Rutube: пример 2' },
-    { type: 'iframe', url: 'https://rutube.ru/play/embed/0e69b45e4ee399c38af30d6be2f87ab5', name: 'Rutube: пример 3' },
-    { type: 'iframe', url: 'https://rutube.ru/play/embed/90a62a421a55411f711b694a163d4356', name: 'Rutube: пример 4' },
+const sources = [
+    // === 🎬 RUTUBE ===
+    { type: 'iframe', url: 'https://rutube.ru/play/embed/20872670', name: 'Rutube: пример 1' },
+    { type: 'iframe', url: 'https://rutube.ru/play/embed/0e69b45e4ee399c38af30d6be2f87ab5', name: 'Rutube: пример 2' },
+    { type: 'iframe', url: 'https://rutube.ru/play/embed/90a62a421a55411f711b694a163d4356', name: 'Rutube: пример 3' },
+    { type: 'iframe', url: 'https://rutube.ru/play/embed/e8cf2d8185ef0995e8beb8109bed95db', name: 'Rutube: пример 4' },
+    { type: 'iframe', url: 'https://rutube.ru/play/embed/7163336', name: 'Rutube: пример 5' },
+    { type: 'iframe', url: 'https://rutube.ru/play/embed/104215', name: 'Rutube: пример 6' },
 
+    // === 🇷🇺 РОССИЙСКИЕ (HTTPS HLS) ===
     { type: 'hls', url: 'https://zabava-htlive.cdn.ngenix.net/hls/CH_RUSSIA24/variant.m3u8', name: 'Россия 24' },
     { type: 'hls', url: 'https://vgtrkregion-reg.cdnvideo.ru/vgtrk/0/russia24-hd/index.m3u8', name: 'Россия 24 HD' },
     { type: 'hls', url: 'https://vgtrkregion-reg.cdnvideo.ru/vgtrk/0/russia1-hd/index.m3u8', name: 'Россия 1 HD' },
@@ -17,6 +21,7 @@ window.SOURCES = [
     { type: 'hls', url: 'https://bl.uma.media/live/317850/HLS/4614144_3/2/1/playlist.m3u8', name: 'ТНТ' },
     { type: 'hls', url: 'https://live-vestinn.cdnvideo.ru/vestinn/vestinn/playlist.m3u8', name: 'Россия 24 (Н.Новгород)' },
 
+    // === 🌍 МЕЖДУНАРОДНЫЕ ===
     { type: 'hls', url: 'https://rt-glb.rttv.com/dvr/rtnews/playlist.m3u8', name: 'RT News' },
     { type: 'hls', url: 'https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8', name: 'NASA TV' },
     { type: 'hls', url: 'https://bloomberg-bloomberg-1-eu.rakuten.wurl.tv/playlist.m3u8', name: 'Bloomberg TV' },
