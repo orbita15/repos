@@ -125,18 +125,6 @@
             font-family: monospace; flex-shrink: 0;
         }
 
-        #soundBtn {
-            position: absolute; top: 20px; right: 20px; z-index: 100;
-            width: 48px; height: 48px; border-radius: 50%;
-            background: rgba(0,0,0,0.7); color: #fff; border: 2px solid #555;
-            font-size: 22px; cursor: pointer; line-height: 1;
-            display: flex; align-items: center; justify-content: center;
-            transition: all 0.2s; padding: 0;
-        }
-        #soundBtn:hover, #soundBtn:active { background: #333; border-color: #888; }
-        #soundBtn.on { border-color: #4dff9a; color: #4dff9a; box-shadow: 0 0 15px rgba(77,255,154,0.5); }
-        #soundBtn.off { border-color: #a33; color: #ff5b5b; }
-
         #videoControls {
             position: absolute; bottom: 80px; right: 20px; z-index: 300;
             display: none; flex-direction: column; gap: 8px;
@@ -187,15 +175,6 @@
             background: rgba(255,91,91,0.15);
         }
 
-        #volumeWrap {
-            position: absolute; top: 78px; right: 20px; z-index: 100;
-            background: rgba(0,0,0,0.85); padding: 10px 12px; border-radius: 10px;
-            display: none; align-items: center; gap: 8px; color: #fff;
-            border: 1px solid #444; font-size: 12px;
-        }
-        #volumeWrap.show { display: flex; }
-        #volumeSlider { width: 110px; cursor: pointer; accent-color: #4dff9a; }
-
         #streamVideo {
             position: absolute; top: -9999px; left: -9999px;
             width: 1px; height: 1px; opacity: 0.01; pointer-events: none;
@@ -216,9 +195,6 @@
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             }
             #menuToggle { width: 44px; height: 44px; font-size: 20px; top: 18px; left: 14px; }
-            #soundBtn { width: 44px; height: 44px; font-size: 20px; top: 18px; right: 14px; }
-            #volumeWrap { top: 72px; right: 14px; }
-            #volumeSlider { width: 90px; }
             #playHint { font-size: 13px; padding: 10px 16px; bottom: 30px; }
             .channelItem { padding: 12px 16px; font-size: 15px; }
             .channelGroup { padding: 10px 16px 4px; }
@@ -230,7 +206,6 @@
         @media (orientation: landscape) and (max-height: 500px) {
             #info { display: none; }
             #menuToggle { width: 40px; height: 40px; font-size: 18px; top: 10px; left: 10px; }
-            #soundBtn { width: 40px; height: 40px; font-size: 18px; top: 10px; right: 10px; }
             #channelMenu { width: min(300px, 50vw); }
             #playHint { bottom: 15px; font-size: 12px; padding: 8px 14px; }
             #manageBtn { bottom: 8px; right: 8px; padding: 8px 14px; font-size: 12px; }
@@ -241,7 +216,7 @@
 </head>
 <body>
     <div id="info">🎥 Ночная парковка — Уличный кинотеатр</div>
-    <div id="playHint">▶ НАЖМИТЕ, ЧТОБЫ ЗАПУСТИТЬ ВИДЕО СО ЗВУКОМ</div>
+    <div id="playHint">▶ НАЖМИТЕ, ЧТОБЫ ЗАПУСТИТЬ ВИДЕО</div>
 
     <button id="menuToggle">☰</button>
     <div id="menuOverlay"></div>
@@ -254,7 +229,6 @@
         <div id="channelList"></div>
     </div>
 
-    <button id="soundBtn" class="off" title="Включить звук">🔇</button>
     <button id="manageBtn">🎮 УПРАВЛЯТЬ ВИДЕО</button>
 
     <div id="videoControls">
@@ -277,25 +251,16 @@
         </div>
     </div>
 
-    <div id="volumeWrap">
-        <span>🔊</span>
-        <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.7">
-        <span id="volumeVal">70%</span>
-    </div>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
 
-    <video id="streamVideo" playsinline loop preload="auto"></video>
+    <video id="streamVideo" playsinline loop preload="auto" muted></video>
 
     <script src="scene.js"></script>
 
     <script>
-    // ============================================================
-    // ГЛАВНЫЙ СКРИПТ ПЛЕЕРА
-    // ============================================================
     (function () {
         'use strict';
 
@@ -317,79 +282,11 @@
         const videoElement = document.getElementById('streamVideo');
         videoElement.playsInline = true;
         videoElement.loop = true;
-        videoElement.volume = 0.7;
+        videoElement.muted = true;   // всегда без звука
 
-        const soundBtn      = document.getElementById('soundBtn');
-        const volumeWrap    = document.getElementById('volumeWrap');
-        const volumeSlider  = document.getElementById('volumeSlider');
-        const volumeVal     = document.getElementById('volumeVal');
         const manageBtn     = document.getElementById('manageBtn');
         const videoControls = document.getElementById('videoControls');
         const playHint      = document.getElementById('playHint');
-
-        // --------------------------------------------------------
-        // ЗВУК (только для HLS, глобальная кнопка вверху справа)
-        // --------------------------------------------------------
-        let soundEnabled = false;
-        let userInteracted = false;
-
-        function updateSoundBtn() {
-            if (soundEnabled) {
-                soundBtn.textContent = '🔊';
-                soundBtn.classList.remove('off');
-                soundBtn.classList.add('on');
-                soundBtn.title = 'Выключить звук';
-            } else {
-                soundBtn.textContent = '🔇';
-                soundBtn.classList.remove('on');
-                soundBtn.classList.add('off');
-                soundBtn.title = 'Включить звук';
-            }
-        }
-
-        function enableSound() {
-            soundEnabled = true;
-            videoElement.muted = false;
-            videoElement.volume = parseFloat(volumeSlider.value);
-            videoElement.play().catch(() => {});
-            updateSoundBtn();
-        }
-
-        function disableSound() {
-            soundEnabled = false;
-            videoElement.muted = true;
-            updateSoundBtn();
-        }
-
-        soundBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            userInteracted = true;
-            if (soundEnabled) {
-                disableSound();
-                volumeWrap.classList.remove('show');
-            } else {
-                enableSound();
-                volumeWrap.classList.add('show');
-            }
-        });
-
-        volumeSlider.addEventListener('input', () => {
-            const v = parseFloat(volumeSlider.value);
-            videoElement.volume = v;
-            volumeVal.textContent = Math.round(v * 100) + '%';
-            if (v > 0 && !soundEnabled) enableSound();
-            if (v === 0) videoElement.muted = true;
-            else if (soundEnabled) videoElement.muted = false;
-        });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'm' || e.key === 'M' || e.key === 'ь' || e.key === 'Ь') {
-                if (soundEnabled) disableSound();
-                else enableSound();
-            }
-        });
-
-        updateSoundBtn();
 
         // --------------------------------------------------------
         // ТЕКСТУРЫ ЭКРАНА
@@ -488,35 +385,28 @@
             ictx.stroke();
 
             ictx.textAlign = 'left';
-            ictx.font = 'bold 36px Arial';
-            ictx.fillStyle = soundEnabled ? '#4dff9a' : '#ff5b5b';
-            ictx.fillText(soundEnabled ? '🔊' : '🔇', 70, 145);
-            ictx.fillStyle = '#aab6c8';
-            ictx.font = '20px Arial';
-            ictx.fillText(soundEnabled ? 'ЗВУК ВКЛ' : 'ЗВУК ВЫКЛ', 120, 152);
-
             ictx.fillStyle = '#aab6c8';
             ictx.font = '26px Arial';
-            ictx.fillText('ТЕКУЩИЙ КАНАЛ:', 70, 195);
+            ictx.fillText('ТЕКУЩИЙ КАНАЛ:', 70, 155);
 
             ictx.fillStyle = '#ffffff';
             ictx.font = 'bold 42px Arial';
-            ictx.fillText(uiState.currentName, 70, 235);
+            ictx.fillText(uiState.currentName, 70, 195);
 
             const badgeColor = statusColor(uiState.currentStatus);
             ictx.fillStyle = badgeColor + '40';
-            ictx.fillRect(W - 400, 215, 330, 60);
+            ictx.fillRect(W - 400, 175, 330, 60);
             ictx.strokeStyle = badgeColor;
             ictx.lineWidth = 4;
-            ictx.strokeRect(W - 400, 215, 330, 60);
+            ictx.strokeRect(W - 400, 175, 330, 60);
             ictx.fillStyle = badgeColor;
             ictx.font = 'bold 34px Arial';
             ictx.textAlign = 'center';
-            ictx.fillText(statusLabel(uiState.currentStatus), W - 235, 230);
+            ictx.fillText(statusLabel(uiState.currentStatus), W - 235, 190);
 
             if (uiState.currentStatus === 'loading') {
                 const cx = W - 440;
-                const cy = 245;
+                const cy = 205;
                 ictx.strokeStyle = badgeColor;
                 ictx.lineWidth = 6;
                 ictx.beginPath();
@@ -527,22 +417,22 @@
             ictx.textAlign = 'left';
             ictx.fillStyle = '#d7e2f0';
             ictx.font = '28px Arial';
-            ictx.fillText(uiState.statusLine, 70, 305);
+            ictx.fillText(uiState.statusLine, 70, 265);
 
             ictx.strokeStyle = 'rgba(120,200,255,0.25)';
             ictx.beginPath();
-            ictx.moveTo(60, 355);
-            ictx.lineTo(W - 60, 355);
+            ictx.moveTo(60, 315);
+            ictx.lineTo(W - 60, 315);
             ictx.stroke();
 
             ictx.fillStyle = '#7ec8ff';
             ictx.font = 'bold 24px Arial';
-            ictx.fillText('СПИСОК КАНАЛОВ:', 70, 375);
+            ictx.fillText('СПИСОК КАНАЛОВ:', 70, 335);
 
             const cols = 2;
             const colW = (W - 140) / cols;
             const rowH = 38;
-            const startY = 408;
+            const startY = 368;
 
             uiState.sources.forEach((s, i) => {
                 const col = i % cols;
@@ -608,7 +498,7 @@
         }
 
         // --------------------------------------------------------
-        // ЗАГРУЗКА КАНАЛОВ ИЗ sources.json
+        // ЗАГРУЗКА КАНАЛОВ
         // --------------------------------------------------------
         const playHintEl = playHint;
         const menuToggle = document.getElementById('menuToggle');
@@ -746,6 +636,8 @@
             iframe.style.height = IFRAME_H + 'px';
             iframe.style.border = 'none';
             iframe.style.background = '#000';
+            // ★ По умолчанию iframe НЕ перехватывает клики — камера работает.
+            //   Клики включаются только когда открыта панель управления.
             iframe.style.pointerEvents = 'none';
             iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
             iframe.setAttribute('allowfullscreen', 'true');
@@ -793,21 +685,28 @@
             videoControls.classList.remove('show');
         }
 
+        // ★ Открытие панели управления одновременно ВКЛЮЧАЕТ клики по iframe,
+        //   чтобы Rutube-плеер получил фокус и заработал.
+        //   Закрытие панели — выключает клики, и камера снова свободна.
         manageBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (!currentIframe) return;
 
             const isOpen = videoControls.classList.contains('show');
             if (isOpen) {
+                // Закрываем управление
                 videoControls.classList.remove('show');
                 manageBtn.classList.remove('active');
                 manageBtn.textContent = '🎮 УПРАВЛЯТЬ ВИДЕО';
-                pushLog('Панель управления скрыта');
+                currentIframe.style.pointerEvents = 'none';
+                pushLog('Панель управления скрыта (камера свободна)');
             } else {
+                // Открываем управление
                 videoControls.classList.add('show');
                 manageBtn.classList.add('active');
                 manageBtn.textContent = '✕ СКРЫТЬ УПРАВЛЕНИЕ';
-                pushLog('Панель управления показана');
+                currentIframe.style.pointerEvents = 'auto';
+                pushLog('Панель управления показана (клики по плееру активны)');
             }
         });
 
@@ -904,28 +803,13 @@
         }
 
         function tryPlay() {
-            if (soundEnabled && userInteracted) {
-                videoElement.muted = false;
-            } else if (!userInteracted) {
-                videoElement.muted = true;
-            }
-
+            videoElement.muted = true;
             const p = videoElement.play();
             if (p && p.catch) {
                 p.catch(err => {
                     console.warn('play() failed:', err.name);
-                    if (!videoElement.muted) {
-                        videoElement.muted = true;
-                        soundEnabled = false;
-                        updateSoundBtn();
-                        videoElement.play().catch(e2 => {
-                            uiState.statusLine = 'Нажмите для запуска';
-                            playHintEl.classList.remove('hidden');
-                        });
-                    } else {
-                        uiState.statusLine = 'Нажмите для запуска';
-                        playHintEl.classList.remove('hidden');
-                    }
+                    uiState.statusLine = 'Нажмите для запуска';
+                    playHintEl.classList.remove('hidden');
                 });
             }
         }
@@ -1077,7 +961,7 @@
             playHintEl.classList.add('hidden');
             uiState.currentStatus = 'playing';
             uiState.statusLine = `▶ ${sources[currentIndex].name}`;
-            pushLog(`▶ Играет: ${sources[currentIndex].name}${videoElement.muted ? ' (без звука)' : ''}`);
+            pushLog(`▶ Играет: ${sources[currentIndex].name}`);
             markSource(currentIndex, 'ready');
             showVideo();
         });
@@ -1100,22 +984,13 @@
         });
 
         document.addEventListener('click', () => {
-            if (!userInteracted) {
-                userInteracted = true;
-                if (!soundEnabled) {
-                    enableSound();
-                    volumeWrap.classList.add('show');
-                    setTimeout(() => volumeWrap.classList.remove('show'), 8000);
-                }
-                if (videoElement.paused && videoElement.readyState >= 2) {
-                    tryPlay();
-                }
+            if (videoElement.paused && videoElement.readyState >= 2) {
+                tryPlay();
             }
         });
 
         // --------------------------------------------------------
-        // КНОПКИ УПРАВЛЕНИЯ ВИДЕО
-        // Осталось: Play / Pause / Stop / ±10 сек / Fullscreen / Закрыть
+        // КНОПКИ УПРАВЛЕНИЯ
         // --------------------------------------------------------
 
         document.getElementById('vcPlay').addEventListener('click', () => {
@@ -1196,6 +1071,7 @@
             videoControls.classList.remove('show');
             manageBtn.classList.remove('active');
             manageBtn.textContent = '🎮 УПРАВЛЯТЬ ВИДЕО';
+            if (currentIframe) currentIframe.style.pointerEvents = 'none';
             pushLog('Панель управления скрыта');
         });
 
