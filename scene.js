@@ -62,7 +62,6 @@
     scene.add(spotLight);
     scene.add(spotLight.target);
 
-    // Земля
     const groundCanvas = document.createElement('canvas');
     groundCanvas.width = 1024;
     groundCanvas.height = 1024;
