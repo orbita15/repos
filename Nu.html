@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Ночная парковка — Уличный кинотеатр</title>
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { margin: 0; padding: 0; overflow: hidden; background-color: #000; font-family: Arial, Helvetica, sans-serif; width: 100%; height: 100%; }
+
+        #webglCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; display: block; }
+        #css3dLayer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+
+        #info {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            color: #fff; background: rgba(0,0,0,0.6);
+            padding: 8px 16px; border-radius: 8px; pointer-events: none;
+            z-index: 100; font-size: 13px; white-space: nowrap;
+            max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
+        }
+        #playHint {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            color: #fff; background: rgba(0,0,0,0.85); padding: 12px 22px;
+            border-radius: 8px; z-index: 100; font-size: 15px;
+            cursor: pointer; transition: opacity 0.5s; border: 2px solid #4dff9a;
+            box-shadow: 0 0 20px rgba(77, 255, 154, 0.5);
+            text-align: center; max-width: 90vw;
+        }
+        #playHint.hidden { opacity: 0; pointer-events: none; }
+
+        #menuToggle {
+            position: absolute; top: 20px; left: 20px; z-index: 200;
+            width: 48px; height: 48px; border-radius: 8px;
+            background: rgba(0,0,0,0.8); color: #fff; border: 2px solid #555;
+            font-size: 22px; cursor: pointer; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s; padding: 0;
+        }
+        #menuToggle:hover, #menuToggle:active { background: #333; border-color: #888; }
+
+        #channelMenu {
+            position: absolute; top: 0; left: 0; bottom: 0;
+            width: min(320px, 85vw);
+            background: rgba(10, 14, 24, 0.97); border-right: 2px solid #2a7;
+            z-index: 190; transform: translateX(-100%);
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex; flex-direction: column;
+            box-shadow: 4px 0 30px rgba(0,0,0,0.8);
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+        }
+        #channelMenu.open { transform: translateX(0); }
+
+        #menuHeader {
+            padding: 16px 20px; border-bottom: 2px solid #2a7;
+            display: flex; align-items: center; justify-content: space-between;
+            flex-shrink: 0;
+        }
+        #menuHeader h2 { margin: 0; color: #4dff9a; font-size: 17px; font-weight: bold; letter-spacing: 0.5px; }
+        #menuClose {
+            background: none; border: none; color: #888; font-size: 24px;
+            cursor: pointer; padding: 0; width: 32px; height: 32px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 6px;
+        }
+        #menuClose:hover { color: #fff; background: rgba(255,255,255,0.1); }
+
+        #channelList { flex: 1; overflow-y: auto; padding: 8px 0; -webkit-overflow-scrolling: touch; }
+        #channelList::-webkit-scrollbar { width: 6px; }
+        #channelList::-webkit-scrollbar-track { background: transparent; }
+        #channelList::-webkit-scrollbar-thumb { background: #2a7; border-radius: 3px; }
+
+        .channelGroup {
+            padding: 10px 20px 6px; color: #7ec8ff; font-size: 11px;
+            font-weight: bold; letter-spacing: 1px; text-transform: uppercase; opacity: 0.7;
+        }
+        .channelItem {
+            display: flex; align-items: center; gap: 10px;
+            padding: 11px 20px; cursor: pointer; color: #c8d0dc;
+            font-size: 14px; transition: background 0.15s;
+            border-left: 3px solid transparent;
+        }
+        .channelItem:hover, .channelItem:active { background: rgba(120, 200, 255, 0.08); }
+        .channelItem.active {
+            background: rgba(77, 255, 154, 0.12);
+            border-left-color: #4dff9a; color: #fff; font-weight: bold;
+        }
+        .channelItem.ok .statusDot { background: #4dff9a; box-shadow: 0 0 8px #4dff9a; }
+        .channelItem.fail .statusDot { background: #ff5b5b; box-shadow: 0 0 8px #ff5b5b; }
+        .channelItem.loading .statusDot { background: #ffd24d; animation: pulse 1s infinite; }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        .statusDot { width: 10px; height: 10px; border-radius: 50%; background: #555; flex-shrink: 0; transition: all 0.3s; }
+        .channelName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .channelType {
+            font-size: 10px; padding: 2px 6px; border-radius: 4px;
+            background: rgba(255,255,255,0.1); color: #8fa0b5;
+            font-family: monospace; flex-shrink: 0;
+        }
+
+        #soundBtn {
+            position: absolute; top: 20px; right: 20px; z-index: 100;
+            width: 48px; height: 48px; border-radius: 50%;
+            background: rgba(0,0,0,0.7); color: #fff; border: 2px solid #555;
+            font-size: 22px; cursor: pointer; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s; padding: 0;
+        }
+        #soundBtn:hover, #soundBtn:active { background: #333; border-color: #888; }
+        #soundBtn.on { border-color: #4dff9a; color: #4dff9a; box-shadow: 0 0 15px rgba(77,255,154,0.5); }
+        #soundBtn.off { border-color: #a33; color: #ff5b5b; }
+
+        #volumeWrap {
+            position: absolute; top: 78px; right: 20px; z-index: 100;
+            background: rgba(0,0,0,0.85); padding: 10px 12px; border-radius: 10px;
+            display: none; align-items: center; gap: 8px; color: #fff;
+            border: 1px solid #444; font-size: 12px;
+        }
+        #volumeWrap.show { display: flex; }
+        #volumeSlider { width: 110px; cursor: pointer; accent-color: #4dff9a; }
+
+        #modeHint {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            color: #fff; background: rgba(0,0,0,0.8); padding: 8px 16px;
+            border-radius: 8px; font-size: 12px; z-index: 100;
+            border: 1px solid #4dff9a; pointer-events: none;
+            opacity: 0; transition: opacity 0.3s; white-space: nowrap;
+        }
+        #modeHint.show { opacity: 1; }
+        #modeHint.pointer { border-color: #ffd24d; color: #ffd24d; }
+
+        #streamVideo {
+            position: absolute; top: -9999px; left: -9999px;
+            width: 1px; height: 1px; opacity: 0.01; pointer-events: none;
+        }
+
+        #menuOverlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.4);
+            z-index: 180; opacity: 0; pointer-events: none; transition: opacity 0.35s;
+        }
+        #menuOverlay.show { opacity: 1; pointer-events: auto; }
+
+        @media (max-width: 600px) {
+            #info {
+                top: 20px; left: 78px; right: 78px;
+                transform: none; font-size: 11px; padding: 6px 10px;
+                max-width: none; text-align: center;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            }
+            #menuToggle { width: 44px; height: 44px; font-size: 20px; top: 18px; left: 14px; }
+            #soundBtn { width: 44px; height: 44px; font-size: 20px; top: 18px; right: 14px; }
+            #volumeWrap { top: 72px; right: 14px; }
+            #volumeSlider { width: 90px; }
+            #playHint { font-size: 13px; padding: 10px 16px; bottom: 30px; }
+            .channelItem { padding: 12px 16px; font-size: 15px; }
+            .channelGroup { padding: 10px 16px 4px; }
+            #modeHint { font-size: 11px; padding: 6px 12px; bottom: 12px; }
+        }
+
+        @media (orientation: landscape) and (max-height: 500px) {
+            #info { display: none; }
+            #menuToggle { width: 40px; height: 40px; font-size: 18px; top: 10px; left: 10px; }
+            #soundBtn { width: 40px; height: 40px; font-size: 18px; top: 10px; right: 10px; }
+            #channelMenu { width: min(300px, 50vw); }
+            #playHint { bottom: 15px; font-size: 12px; padding: 8px 14px; }
+            #modeHint { bottom: 8px; font-size: 11px; padding: 5px 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="info">🎥 Ночная парковка — Уличный кинотеатр</div>
+    <div id="playHint">▶ НАЖМИТЕ, ЧТОБЫ ЗАПУСТИТЬ ВИДЕО</div>
+    <div id="modeHint"></div>
+
+    <button id="menuToggle">☰</button>
+    <div id="menuOverlay"></div>
+
+    <div id="channelMenu">
+        <div id="menuHeader">
+            <h2>📺 КАНАЛЫ</h2>
+            <button id="menuClose">✕</button>
+        </div>
+        <div id="channelList"></div>
+    </div>
+
+    <button id="soundBtn" class="off" title="Включить звук">🔇</button>
+    <div id="volumeWrap">
+        <span>🔊</span>
+        <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.7">
+        <span id="volumeVal">70%</span>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+
+    <video id="streamVideo" playsinline loop preload="auto"></video>
+
+    <script src="sources.js"></script>
+    <script src="scene.js"></script>
+    <script src="player.js"></script>
+</body>
+</html>
