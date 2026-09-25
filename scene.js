@@ -1,386 +1,813 @@
 // ============================================================
-// scene.js — 3D-сцена ночной парковки с уличным кинотеатром
-// Требует THREE (r128) и OrbitControls, загруженные до этого файла.
-// Предоставляет глобальный объект PARKING_SCENE с полями:
-//   scene, camera, renderer, cssRenderer, controls,
-//   screenWidth, screenHeight, screenMesh,
-//   screenMaterial, infoTexture, videoTexture, screenGlow,
-//   resize()
+// player.js — логика уличного кинотеатра
+// Зависит от: THREE, PARKING_SCENE (scene.js), Hls
+// Управление Rutube — кликами по экрану (двойной тап переключает режим)
+// Список каналов загружается из sources.json
 // ============================================================
 
 (function () {
     'use strict';
 
-    // ------------------------------------------------------------
-    // БАЗА
-    // ------------------------------------------------------------
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050510);
-    scene.fog = new THREE.FogExp2(0x050510, 0.017);
-
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(12, 6, 22);
-    camera.lookAt(0, 4, 0);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputEncoding = THREE.sRGBEncoding;
-    renderer.domElement.id = 'webglCanvas';
-    document.body.appendChild(renderer.domElement);
-
-    const cssRenderer = new THREE.CSS3DRenderer();
-    cssRenderer.setSize(window.innerWidth, window.innerHeight);
-    cssRenderer.domElement.id = 'css3dLayer';
-    document.body.appendChild(cssRenderer.domElement);
-
-    // OrbitControls — НЕ блокируются при управлении видео
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, 4, 0);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 2.1;
-    controls.minDistance = 5;
-    controls.maxDistance = 50;
-
-    // ------------------------------------------------------------
-    // СВЕТ
-    // ------------------------------------------------------------
-    scene.add(new THREE.AmbientLight(0x303045, 0.45));
-
-    const moonLight = new THREE.DirectionalLight(0x8899bb, 0.5);
-    moonLight.position.set(-15, 25, -10);
-    moonLight.castShadow = true;
-    moonLight.shadow.mapSize.width = 2048;
-    moonLight.shadow.mapSize.height = 2048;
-    moonLight.shadow.camera.left   = -50;
-    moonLight.shadow.camera.right  =  50;
-    moonLight.shadow.camera.top    =  50;
-    moonLight.shadow.camera.bottom = -50;
-    scene.add(moonLight);
-
-    const screenGlow = new THREE.PointLight(0xffaa55, 1.2, 40, 2);
-    screenGlow.position.set(0, 6, 5);
-    scene.add(screenGlow);
-
-    const spotLight = new THREE.SpotLight(0xffdd88, 1.5);
-    spotLight.position.set(8, 12, 10);
-    spotLight.target.position.set(0, 0, 0);
-    spotLight.angle = Math.PI / 5;
-    spotLight.penumbra = 0.5;
-    spotLight.castShadow = true;
-    scene.add(spotLight);
-    scene.add(spotLight.target);
-
-    // ------------------------------------------------------------
-    // ЗЕМЛЯ С ГРАДИЕНТОМ
-    // ------------------------------------------------------------
-    const groundCanvas = document.createElement('canvas');
-    groundCanvas.width = 1024;
-    groundCanvas.height = 1024;
-    const gctx = groundCanvas.getContext('2d');
-
-    const groundGrad = gctx.createRadialGradient(512, 512, 60, 512, 512, 480);
-    groundGrad.addColorStop(0.00, '#1e1e28');
-    groundGrad.addColorStop(0.20, '#15151e');
-    groundGrad.addColorStop(0.40, '#0e0e18');
-    groundGrad.addColorStop(0.58, '#09090f');
-    groundGrad.addColorStop(0.72, '#050510');
-    groundGrad.addColorStop(0.85, '#050510');
-    groundGrad.addColorStop(1.00, '#050510');
-    gctx.fillStyle = groundGrad;
-    gctx.fillRect(0, 0, 1024, 1024);
-
-    gctx.fillStyle = 'rgba(255,255,255,0.010)';
-    for (let i = 0; i < 3500; i++) {
-        gctx.fillRect(Math.random() * 1024, Math.random() * 1024, 1, 1);
+    const S = window.PARKING_SCENE;
+    if (!S) {
+        console.error('scene.js не загружен!');
+        return;
     }
 
-    const groundTexture = new THREE.CanvasTexture(groundCanvas);
-    groundTexture.encoding = THREE.sRGBEncoding;
-    groundTexture.minFilter = THREE.LinearFilter;
-    groundTexture.magFilter = THREE.LinearFilter;
-    groundTexture.generateMipmaps = false;
-
-    const ground = new THREE.Mesh(
-        new THREE.PlaneGeometry(140, 140),
-        new THREE.MeshStandardMaterial({ map: groundTexture, roughness: 1.0, metalness: 0.0, color: 0xffffff })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    scene.add(ground);
-
-    const lineMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.8 });
-    for (let i = -3; i <= 3; i++) {
-        const line = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.01, 12), lineMaterial);
-        line.position.set(i * 5, 0.02, 0);
-        line.receiveShadow = true;
-        scene.add(line);
-    }
-
-    // ------------------------------------------------------------
-    // ЭКРАН + КАРКАС
-    // ------------------------------------------------------------
-    const screenWidth = 16;
-    const screenHeight = 9;
-
-    const screenBacking = new THREE.Mesh(
-        new THREE.PlaneGeometry(screenWidth, screenHeight),
-        new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.FrontSide })
-    );
-    screenBacking.position.set(0, 5.5, 0.95);
-    scene.add(screenBacking);
-
-    const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.8 });
-
-    const topBar = new THREE.Mesh(new THREE.BoxGeometry(screenWidth + 1, 0.4, 0.4), frameMaterial);
-    topBar.position.set(0, 5.5 + screenHeight / 2 + 0.2, 1.3);
-    topBar.castShadow = true; scene.add(topBar);
-
-    const bottomBar = new THREE.Mesh(new THREE.BoxGeometry(screenWidth + 1, 0.4, 0.4), frameMaterial);
-    bottomBar.position.set(0, 5.5 - screenHeight / 2 - 0.2, 1.3);
-    bottomBar.castShadow = true; scene.add(bottomBar);
-
-    const leftPost = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 8, 8), frameMaterial);
-    leftPost.position.set(-screenWidth / 2 - 0.7, 4, 1.3);
-    leftPost.castShadow = true; scene.add(leftPost);
-
-    const rightPost = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 8, 8), frameMaterial);
-    rightPost.position.set(screenWidth / 2 + 0.7, 4, 1.3);
-    rightPost.castShadow = true; scene.add(rightPost);
-
-    // Текстуры экрана будут установлены извне (из index.html)
-    const screenMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        side: THREE.FrontSide,
-        toneMapped: false
-    });
-
-    const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(screenWidth, screenHeight), screenMaterial);
-    screenMesh.position.set(0, 5.5, 1.05);
-    scene.add(screenMesh);
-
-    // ------------------------------------------------------------
-    // МАШИНЫ
-    // ------------------------------------------------------------
-    function createCar(color, x, z, rotationY) {
-        rotationY = rotationY || 0;
-        const carGroup = new THREE.Group();
-
-        const body = new THREE.Mesh(
-            new THREE.BoxGeometry(1.8, 0.6, 4.2),
-            new THREE.MeshStandardMaterial({ color: color, roughness: 0.4, metalness: 0.6 })
-        );
-        body.position.y = 0.5; body.castShadow = true; body.receiveShadow = true;
-        carGroup.add(body);
-
-        const cabin = new THREE.Mesh(
-            new THREE.BoxGeometry(1.5, 0.5, 2.0),
-            new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.3 })
-        );
-        cabin.position.set(0, 1.0, -0.3); cabin.castShadow = true;
-        carGroup.add(cabin);
-
-        const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
-        const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.25, 12);
-        [[-0.9, 0.35, 1.4], [0.9, 0.35, 1.4], [-0.9, 0.35, -1.4], [0.9, 0.35, -1.4]].forEach(pos => {
-            const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-            wheel.rotation.z = Math.PI / 2;
-            wheel.position.set(pos[0], pos[1], pos[2]);
-            wheel.castShadow = true;
-            carGroup.add(wheel);
-        });
-
-        const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 0.8 });
-        const headlightGeo = new THREE.SphereGeometry(0.12, 8, 8);
-        const hl1 = new THREE.Mesh(headlightGeo, headlightMat);
-        hl1.position.set(-0.6, 0.55, 2.1); carGroup.add(hl1);
-        const hl2 = new THREE.Mesh(headlightGeo, headlightMat);
-        hl2.position.set(0.6, 0.55, 2.1); carGroup.add(hl2);
-
-        carGroup.position.set(x, 0, z);
-        carGroup.rotation.y = rotationY;
-        return carGroup;
-    }
-
-    const carColors = [0xaa2222, 0x2244aa, 0x22aa44, 0xcccccc, 0x8844aa, 0xcc6622];
-    const carPositions = [
-        { x: -8, z: 8, ry: 0.1 }, { x: -3, z: 9, ry: -0.05 },
-        { x: 3, z: 8.5, ry: 0.05 }, { x: 8, z: 9, ry: -0.1 },
-        { x: -9, z: 14, ry: 0.2 }, { x: 9, z: 13, ry: -0.15 }
-    ];
-    carPositions.forEach((pos, i) => {
-        scene.add(createCar(carColors[i % carColors.length], pos.x, pos.z, pos.ry));
-    });
-
-    // ------------------------------------------------------------
-    // ФОНАРИ
-    // ------------------------------------------------------------
-    function createStreetLamp(x, z) {
-        const lampGroup = new THREE.Group();
-        const poleMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.5, metalness: 0.8 });
-
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 8, 8), poleMat);
-        pole.position.y = 4; pole.castShadow = true; lampGroup.add(pole);
-
-        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 1.5), poleMat);
-        arm.position.set(0, 7.8, 0.7); lampGroup.add(arm);
-
-        const bulb = new THREE.Mesh(
-            new THREE.SphereGeometry(0.25, 8, 8),
-            new THREE.MeshStandardMaterial({ color: 0xffeedd, emissive: 0xffcc88, emissiveIntensity: 1.5 })
-        );
-        bulb.position.set(0, 7.8, 1.4); lampGroup.add(bulb);
-
-        const lampLight = new THREE.PointLight(0xffcc88, 0.8, 20, 2);
-        lampLight.position.set(0, 7.8, 1.4); lampGroup.add(lampLight);
-
-        lampGroup.position.set(x, 0, z);
-        return lampGroup;
-    }
-    scene.add(createStreetLamp(-14, 5));
-    scene.add(createStreetLamp(14, 5));
-    scene.add(createStreetLamp(-14, 18));
-    scene.add(createStreetLamp(14, 18));
-
-    // ------------------------------------------------------------
-    // ЗВЁЗДЫ
-    // ------------------------------------------------------------
-    const starGeometry = new THREE.BufferGeometry();
-    const starCount = 1500;
-    const starPositions = new Float32Array(starCount * 3);
-    for (let i = 0; i < starCount * 3; i += 3) {
-        starPositions[i] = (Math.random() - 0.5) * 400;
-        starPositions[i + 1] = Math.random() * 100 + 20;
-        starPositions[i + 2] = (Math.random() - 0.5) * 400;
-    }
-    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-    scene.add(new THREE.Points(starGeometry, new THREE.PointsMaterial({
-        color: 0xffffff, size: 0.3, transparent: true, opacity: 0.8
-    })));
-
-    // ------------------------------------------------------------
-    // ЛУНА
-    // ------------------------------------------------------------
-    const moon = new THREE.Mesh(
-        new THREE.SphereGeometry(3, 16, 16),
-        new THREE.MeshBasicMaterial({ color: 0xeeddcc })
-    );
-    moon.position.set(-60, 50, -80);
-    scene.add(moon);
-
-    // ------------------------------------------------------------
-    // ДЕРЕВЬЯ И КУСТЫ
-    // ------------------------------------------------------------
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.95 });
-    const leafMatDeciduous = new THREE.MeshStandardMaterial({ color: 0x1e4a1e, roughness: 0.95 });
-    const leafMatFir = new THREE.MeshStandardMaterial({ color: 0x153515, roughness: 0.95 });
-
-    function createTree(x, z, scale) {
-        scale = scale || 1;
-        const group = new THREE.Group();
-        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, 3, 6), trunkMat);
-        trunk.position.y = 1.5; trunk.castShadow = true; trunk.receiveShadow = true; group.add(trunk);
-
-        const leaf1 = new THREE.Mesh(new THREE.SphereGeometry(1.8, 8, 6), leafMatDeciduous);
-        leaf1.position.y = 3.8; leaf1.castShadow = true; group.add(leaf1);
-        const leaf2 = new THREE.Mesh(new THREE.SphereGeometry(1.4, 8, 6), leafMatDeciduous);
-        leaf2.position.set(0.7, 4.6, 0.3); leaf2.castShadow = true; group.add(leaf2);
-        const leaf3 = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 6), leafMatDeciduous);
-        leaf3.position.set(-0.6, 4.9, -0.4); leaf3.castShadow = true; group.add(leaf3);
-
-        group.position.set(x, 0, z);
-        group.scale.setScalar(scale);
-        group.rotation.y = Math.random() * Math.PI * 2;
-        return group;
-    }
-
-    function createFir(x, z, scale) {
-        scale = scale || 1;
-        const group = new THREE.Group();
-        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, 2, 6), trunkMat);
-        trunk.position.y = 1; trunk.castShadow = true; group.add(trunk);
-
-        [{ r: 2.0, h: 2.5, y: 2.6 }, { r: 1.5, h: 2.0, y: 4.1 }, { r: 1.0, h: 1.6, y: 5.3 }].forEach(l => {
-            const cone = new THREE.Mesh(new THREE.ConeGeometry(l.r, l.h, 8), leafMatFir);
-            cone.position.y = l.y; cone.castShadow = true; group.add(cone);
-        });
-
-        group.position.set(x, 0, z);
-        group.scale.setScalar(scale);
-        group.rotation.y = Math.random() * Math.PI * 2;
-        return group;
-    }
-
-    function createBush(x, z, scale) {
-        scale = scale || 1;
-        const group = new THREE.Group();
-        [{ r: 0.9, x: 0, y: 0.8, z: 0 }, { r: 0.7, x: 0.7, y: 0.7, z: 0.2 },
-         { r: 0.6, x: -0.5, y: 0.6, z: 0.5 }, { r: 0.5, x: 0.2, y: 0.9, z: -0.6 }].forEach(s => {
-            const m = new THREE.Mesh(new THREE.SphereGeometry(s.r, 6, 5), leafMatDeciduous);
-            m.position.set(s.x, s.y, s.z); m.castShadow = true; m.receiveShadow = true; group.add(m);
-        });
-        group.position.set(x, 0, z);
-        group.scale.setScalar(scale);
-        group.rotation.y = Math.random() * Math.PI * 2;
-        return group;
-    }
-
-    const treePositions = [
-        [-26, -18, 1.3, 'fir'], [-18, -23, 1.1, 'fir'],
-        [-10, -26, 1.4, 'fir'], [-2,  -29, 1.2, 'broad'],
-        [6,   -26, 1.3, 'fir'], [14,  -23, 1.0, 'broad'],
-        [22,  -21, 1.2, 'fir'], [30,  -16, 1.1, 'broad'],
-        [-30, -10, 1.2, 'broad'], [-33, -2, 1.4, 'fir'],
-        [-35,  8,  1.1, 'broad'], [-32, 16, 1.3, 'fir'],
-        [-30,  24, 1.0, 'broad'], [-28, 32, 1.2, 'fir'],
-        [30,  -10, 1.3, 'broad'], [33, -2,  1.1, 'fir'],
-        [35,   8,  1.4, 'broad'], [32, 16,  1.2, 'fir'],
-        [30,   24, 1.1, 'broad'], [28, 32,  1.3, 'fir'],
-        [-22, 36, 1.2, 'broad'], [-12, 38, 1.0, 'fir'],
-        [0,   40, 1.3, 'broad'], [12,  38, 1.1, 'fir'],
-        [22,  36, 1.2, 'broad']
-    ];
-    treePositions.forEach(([x, z, s, type]) => {
-        if (type === 'fir') scene.add(createFir(x, z, s));
-        else scene.add(createTree(x, z, s));
-    });
-
-    const bushPositions = [
-        [-22, -15, 1.0], [-15, -20, 0.9], [-7, -23, 1.1], [1, -26, 0.8],
-        [10, -22, 1.0], [18, -19, 0.9], [26, -17, 1.1],
-        [-27, -6, 1.0], [-28, 4, 0.9], [-27, 12, 1.1], [-26, 20, 1.0], [-25, 28, 0.9],
-        [27, -6, 1.1], [28, 4, 1.0], [27, 12, 0.9], [26, 20, 1.1], [25, 28, 1.0],
-        [-18, 34, 0.9], [-6, 36, 1.1], [6, 37, 1.0], [18, 34, 1.1]
-    ];
-    bushPositions.forEach(([x, z, s]) => {
-        scene.add(createBush(x, z, s));
-    });
-
-    // ------------------------------------------------------------
-    // RESIZE
-    // ------------------------------------------------------------
-    function resize() {
-        const w = window.innerWidth;
-        const h = window.innerHeight;
-        if (w === 0 || h === 0) return;
-
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
-
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.setSize(w, h);
-        cssRenderer.setSize(w, h);
-    }
-
-    // ------------------------------------------------------------
-    // ЭКСПОРТ
-    // ------------------------------------------------------------
-    window.PARKING_SCENE = {
+    const {
         scene, camera, renderer, cssRenderer, controls,
         screenWidth, screenHeight, screenMesh, screenMaterial, screenGlow,
-        resize
+        resize: resizeScene
+    } = S;
+
+    // ------------------------------------------------------------
+    // ХОТКЕИ
+    // ------------------------------------------------------------
+    const videoElement = document.getElementById('streamVideo');
+    videoElement.playsInline = true;
+    videoElement.loop = true;
+    videoElement.volume = 0.7;
+
+    const soundBtn     = document.getElementById('soundBtn');
+    const volumeWrap   = document.getElementById('volumeWrap');
+    const volumeSlider = document.getElementById('volumeSlider');
+    const volumeVal    = document.getElementById('volumeVal');
+    const modeHint     = document.getElementById('modeHint');
+    const playHint     = document.getElementById('playHint');
+
+    // ------------------------------------------------------------
+    // ЗВУК
+    // ------------------------------------------------------------
+    let soundEnabled = false;
+    let userInteracted = false;
+
+    function updateSoundBtn() {
+        if (soundEnabled) {
+            soundBtn.textContent = '🔊';
+            soundBtn.classList.remove('off');
+            soundBtn.classList.add('on');
+            soundBtn.title = 'Выключить звук';
+        } else {
+            soundBtn.textContent = '🔇';
+            soundBtn.classList.remove('on');
+            soundBtn.classList.add('off');
+            soundBtn.title = 'Включить звук';
+        }
+    }
+
+    function enableSound() {
+        soundEnabled = true;
+        videoElement.muted = false;
+        videoElement.volume = parseFloat(volumeSlider.value);
+        videoElement.play().catch(() => {});
+        updateSoundBtn();
+    }
+
+    function disableSound() {
+        soundEnabled = false;
+        videoElement.muted = true;
+        updateSoundBtn();
+    }
+
+    soundBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        userInteracted = true;
+        if (soundEnabled) {
+            disableSound();
+            volumeWrap.classList.remove('show');
+        } else {
+            enableSound();
+            volumeWrap.classList.add('show');
+        }
+    });
+
+    volumeSlider.addEventListener('input', () => {
+        const v = parseFloat(volumeSlider.value);
+        videoElement.volume = v;
+        volumeVal.textContent = Math.round(v * 100) + '%';
+        if (v > 0 && !soundEnabled) enableSound();
+        if (v === 0) videoElement.muted = true;
+        else if (soundEnabled) videoElement.muted = false;
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'm' || e.key === 'M' || e.key === 'ь' || e.key === 'Ь') {
+            if (soundEnabled) disableSound();
+            else enableSound();
+        }
+    });
+
+    updateSoundBtn();
+
+    // ------------------------------------------------------------
+    // ТЕКСТУРЫ ЭКРАНА
+    // ------------------------------------------------------------
+    const videoTexture = new THREE.VideoTexture(videoElement);
+    videoTexture.minFilter = THREE.LinearFilter;
+    videoTexture.magFilter = THREE.LinearFilter;
+    videoTexture.format = THREE.RGBAFormat;
+    videoTexture.generateMipmaps = false;
+    videoTexture.encoding = THREE.sRGBEncoding;
+
+    const infoCanvas = document.createElement('canvas');
+    infoCanvas.width = 1280;
+    infoCanvas.height = 720;
+    const ictx = infoCanvas.getContext('2d');
+
+    const infoTexture = new THREE.CanvasTexture(infoCanvas);
+    infoTexture.minFilter = THREE.LinearFilter;
+    infoTexture.magFilter = THREE.LinearFilter;
+    infoTexture.encoding = THREE.sRGBEncoding;
+
+    screenMaterial.map = infoTexture;
+    screenMaterial.needsUpdate = true;
+
+    // ------------------------------------------------------------
+    // СОСТОЯНИЕ UI
+    // ------------------------------------------------------------
+    const uiState = {
+        title: 'УЛИЧНЫЙ КИНОТЕАТР',
+        statusLine: 'Запуск…',
+        currentName: '—',
+        currentStatus: 'waiting',
+        sources: [],
+        log: [],
+        spinner: 0,
+        mode: 'info'
     };
+
+    function pushLog(text) {
+        const time = new Date().toLocaleTimeString('ru-RU');
+        uiState.log.unshift(`[${time}] ${text}`);
+        if (uiState.log.length > 6) uiState.log.pop();
+        console.log(text);
+    }
+
+    function statusColor(s) {
+        switch (s) {
+            case 'ready':   return '#4dff9a';
+            case 'playing': return '#4dff9a';
+            case 'loading': return '#ffd24d';
+            case 'failed':  return '#ff5b5b';
+            default:        return '#8fa0b5';
+        }
+    }
+    function statusLabel(s) {
+        switch (s) {
+            case 'ready':   return 'ГОТОВ';
+            case 'playing': return 'ИГРАЕТ';
+            case 'loading': return 'ЗАГРУЗКА…';
+            case 'failed':  return 'ОШИБКА';
+            default:        return 'ОЖИДАНИЕ';
+        }
+    }
+
+    // ------------------------------------------------------------
+    // ИНФО-ПАНЕЛЬ
+    // ------------------------------------------------------------
+    function drawInfoPanel(t) {
+        const W = infoCanvas.width;
+        const H = infoCanvas.height;
+
+        const grad = ictx.createLinearGradient(0, 0, 0, H);
+        grad.addColorStop(0, '#0b1020');
+        grad.addColorStop(1, '#050810');
+        ictx.fillStyle = grad;
+        ictx.fillRect(0, 0, W, H);
+
+        ictx.fillStyle = 'rgba(255,255,255,0.025)';
+        for (let y = 0; y < H; y += 4) ictx.fillRect(0, y, W, 2);
+
+        ictx.strokeStyle = 'rgba(120,200,255,0.3)';
+        ictx.lineWidth = 4;
+        ictx.strokeRect(20, 20, W - 40, H - 40);
+
+        ictx.fillStyle = '#7ec8ff';
+        ictx.font = 'bold 48px Arial';
+        ictx.textAlign = 'center';
+        ictx.textBaseline = 'top';
+        ictx.fillText('🎬  ' + uiState.title, W / 2, 50);
+
+        ictx.strokeStyle = 'rgba(120,200,255,0.5)';
+        ictx.lineWidth = 2;
+        ictx.beginPath();
+        ictx.moveTo(60, 125);
+        ictx.lineTo(W - 60, 125);
+        ictx.stroke();
+
+        ictx.textAlign = 'left';
+        ictx.font = 'bold 36px Arial';
+        ictx.fillStyle = soundEnabled ? '#4dff9a' : '#ff5b5b';
+        ictx.fillText(soundEnabled ? '🔊' : '🔇', 70, 145);
+        ictx.fillStyle = '#aab6c8';
+        ictx.font = '20px Arial';
+        ictx.fillText(soundEnabled ? 'ЗВУК ВКЛ' : 'ЗВУК ВЫКЛ', 120, 152);
+
+        ictx.fillStyle = '#aab6c8';
+        ictx.font = '26px Arial';
+        ictx.fillText('ТЕКУЩИЙ КАНАЛ:', 70, 195);
+
+        ictx.fillStyle = '#ffffff';
+        ictx.font = 'bold 42px Arial';
+        ictx.fillText(uiState.currentName, 70, 235);
+
+        const badgeColor = statusColor(uiState.currentStatus);
+        ictx.fillStyle = badgeColor + '40';
+        ictx.fillRect(W - 400, 215, 330, 60);
+        ictx.strokeStyle = badgeColor;
+        ictx.lineWidth = 4;
+        ictx.strokeRect(W - 400, 215, 330, 60);
+        ictx.fillStyle = badgeColor;
+        ictx.font = 'bold 34px Arial';
+        ictx.textAlign = 'center';
+        ictx.fillText(statusLabel(uiState.currentStatus), W - 235, 230);
+
+        if (uiState.currentStatus === 'loading') {
+            const cx = W - 440;
+            const cy = 245;
+            ictx.strokeStyle = badgeColor;
+            ictx.lineWidth = 6;
+            ictx.beginPath();
+            ictx.arc(cx, cy, 22, uiState.spinner, uiState.spinner + Math.PI * 1.4);
+            ictx.stroke();
+        }
+
+        ictx.textAlign = 'left';
+        ictx.fillStyle = '#d7e2f0';
+        ictx.font = '28px Arial';
+        ictx.fillText(uiState.statusLine, 70, 305);
+
+        ictx.strokeStyle = 'rgba(120,200,255,0.25)';
+        ictx.beginPath();
+        ictx.moveTo(60, 355);
+        ictx.lineTo(W - 60, 355);
+        ictx.stroke();
+
+        ictx.fillStyle = '#7ec8ff';
+        ictx.font = 'bold 24px Arial';
+        ictx.fillText('СПИСОК КАНАЛОВ:', 70, 375);
+
+        const cols = 2;
+        const colW = (W - 140) / cols;
+        const rowH = 38;
+        const startY = 408;
+
+        uiState.sources.forEach((s, i) => {
+            const col = i % cols;
+            const row = Math.floor(i / cols);
+            const x = 70 + col * colW;
+            const y = startY + row * rowH;
+            if (y > H - 220) return;
+
+            const isCurrent = i === currentIndex;
+            const c = statusColor(s.status);
+
+            if (isCurrent) {
+                ictx.fillStyle = 'rgba(120,200,255,0.12)';
+                ictx.fillRect(x - 10, y - 5, colW - 20, rowH - 6);
+            }
+
+            ictx.beginPath();
+            ictx.fillStyle = c;
+            ictx.arc(x + 10, y + 11, 6, 0, Math.PI * 2);
+            ictx.fill();
+
+            ictx.fillStyle = isCurrent ? '#ffffff' : '#aab6c8';
+            ictx.font = (isCurrent ? 'bold ' : '') + '19px Arial';
+            ictx.fillText(s.name, x + 28, y);
+
+            ictx.fillStyle = c;
+            ictx.font = '15px Arial';
+            ictx.textAlign = 'right';
+            ictx.fillText(statusLabel(s.status), x + colW - 30, y + 2);
+            ictx.textAlign = 'left';
+        });
+
+        const logTop = H - 165;
+        ictx.strokeStyle = 'rgba(120,200,255,0.25)';
+        ictx.beginPath();
+        ictx.moveTo(60, logTop - 15);
+        ictx.lineTo(W - 60, logTop - 15);
+        ictx.stroke();
+
+        ictx.fillStyle = '#7ec8ff';
+        ictx.font = 'bold 22px Arial';
+        ictx.fillText('ЖУРНАЛ СОБЫТИЙ:', 70, logTop - 5);
+
+        ictx.font = '17px monospace';
+        uiState.log.forEach((line, i) => {
+            ictx.fillStyle = i === 0 ? '#e6f3ff' : `rgba(200,220,240,${0.85 - i * 0.12})`;
+            ictx.fillText(line, 70, logTop + 22 + i * 22);
+        });
+
+        const barX = ((t * 220) % (W + 300)) - 150;
+        const barGrad = ictx.createLinearGradient(barX - 150, 0, barX + 150, 0);
+        barGrad.addColorStop(0, 'rgba(120,200,255,0)');
+        barGrad.addColorStop(0.5, 'rgba(120,200,255,0.12)');
+        barGrad.addColorStop(1, 'rgba(120,200,255,0)');
+        ictx.fillStyle = barGrad;
+        ictx.fillRect(0, 0, W, H);
+
+        ictx.fillStyle = 'rgba(200,220,240,0.7)';
+        ictx.font = '20px monospace';
+        ictx.textAlign = 'right';
+        ictx.fillText(new Date().toLocaleTimeString('ru-RU'), W - 60, H - 55);
+        ictx.textAlign = 'left';
+    }
+
+    // ------------------------------------------------------------
+    // КАНАЛЫ — загрузка из sources.json
+    // ------------------------------------------------------------
+    const playHintEl = playHint;
+    const menuToggle = document.getElementById('menuToggle');
+    const menuClose = document.getElementById('menuClose');
+    const channelMenu = document.getElementById('channelMenu');
+    const channelList = document.getElementById('channelList');
+    const menuOverlay = document.getElementById('menuOverlay');
+
+    let sources = [];
+    let currentIndex = 0;
+
+    async function loadSourcesFromFile() {
+        try {
+            const resp = await fetch('sources.json', { cache: 'no-store' });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
+
+            const flat = [];
+            (data.groups || []).forEach(g => {
+                (g.items || []).forEach(it => {
+                    flat.push({ group: g.title, type: it.type, url: it.url, name: it.name });
+                });
+            });
+            sources = flat;
+
+            uiState.sources = sources.map(s => ({ name: s.name, status: 'waiting' }));
+            buildChannelMenu();
+            pushLog(`✅ Загружено каналов: ${sources.length}`);
+            loadSource(0);
+        } catch (e) {
+            console.error('Не удалось загрузить sources.json:', e);
+            pushLog('❌ sources.json не загружен: ' + e.message);
+            uiState.statusLine = 'Ошибка загрузки sources.json';
+            sources = [
+                { type: 'iframe', url: 'https://rutube.ru/play/embed/20872670', name: 'Rutube (по умолчанию)' }
+            ];
+            uiState.sources = sources.map(s => ({ name: s.name, status: 'waiting' }));
+            buildChannelMenu();
+            loadSource(0);
+        }
+    }
+
+    function buildChannelMenu() {
+        channelList.innerHTML = '';
+        let lastGroup = null;
+
+        sources.forEach((src, i) => {
+            const group = src.group || '';
+            if (group && group !== lastGroup) {
+                const h = document.createElement('div');
+                h.className = 'channelGroup';
+                h.textContent = group;
+                channelList.appendChild(h);
+                lastGroup = group;
+            }
+
+            const item = document.createElement('div');
+            item.className = 'channelItem' + (i === currentIndex ? ' active' : '');
+            item.dataset.index = i;
+
+            const dot = document.createElement('span');
+            dot.className = 'statusDot';
+
+            const name = document.createElement('span');
+            name.className = 'channelName';
+            name.textContent = src.name;
+
+            const type = document.createElement('span');
+            type.className = 'channelType';
+            type.textContent = (src.type || 'hls').toUpperCase();
+
+            item.appendChild(dot);
+            item.appendChild(name);
+            item.appendChild(type);
+
+            item.addEventListener('click', () => {
+                if (i === currentIndex && isLoaded) { closeMenu(); return; }
+                loadSource(i);
+                closeMenu();
+            });
+
+            channelList.appendChild(item);
+        });
+    }
+
+    function updateMenuStatus() {
+        const items = channelList.querySelectorAll('.channelItem');
+        items.forEach(item => {
+            const i = Number(item.dataset.index);
+            item.classList.toggle('active', i === currentIndex);
+            item.classList.remove('ok', 'fail', 'loading');
+            const status = uiState.sources[i] ? uiState.sources[i].status : 'waiting';
+            if (status === 'ready' || status === 'playing') item.classList.add('ok');
+            else if (status === 'failed') item.classList.add('fail');
+            else if (status === 'loading') item.classList.add('loading');
+        });
+    }
+
+    function openMenu() { channelMenu.classList.add('open'); menuOverlay.classList.add('show'); }
+    function closeMenu() { channelMenu.classList.remove('open'); menuOverlay.classList.remove('show'); }
+
+    menuToggle.addEventListener('click', openMenu);
+    menuClose.addEventListener('click', closeMenu);
+    menuOverlay.addEventListener('click', closeMenu);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+
+    // ------------------------------------------------------------
+    // IFRAME (CSS3D) + КЛИКИ ПО ЭКРАНУ
+    // ------------------------------------------------------------
+    let currentIframe     = null;
+    let currentIframeObj  = null;
+    let clickMode = 'camera';
+
+    const IFRAME_W = 1280;
+    const IFRAME_H = 720;
+
+    function showModeHint(text, isPointer) {
+        modeHint.textContent = text;
+        modeHint.classList.toggle('pointer', !!isPointer);
+        modeHint.classList.add('show');
+        clearTimeout(showModeHint._t);
+        showModeHint._t = setTimeout(() => modeHint.classList.remove('show'), 1800);
+    }
+
+    function setClickMode(mode) {
+        if (clickMode === mode) return;
+        clickMode = mode;
+        if (!currentIframe) return;
+
+        if (mode === 'iframe') {
+            currentIframe.style.pointerEvents = 'auto';
+            controls.enabled = false;
+            showModeHint('🎮 Управление Rutube — клики на экране', false);
+            pushLog('🎮 Управление Rutube (камера заблокирована)');
+        } else {
+            currentIframe.style.pointerEvents = 'none';
+            controls.enabled = true;
+            showModeHint('🎥 Управление камерой', true);
+            pushLog('🎥 Управление камерой');
+        }
+    }
+
+    function createIframeObject(url) {
+        const iframe = document.createElement('iframe');
+        iframe.src = url;
+        iframe.style.width  = IFRAME_W + 'px';
+        iframe.style.height = IFRAME_H + 'px';
+        iframe.style.border = 'none';
+        iframe.style.background = '#000';
+        iframe.style.pointerEvents = 'none';
+        iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
+        iframe.setAttribute('allowfullscreen', 'true');
+        iframe.setAttribute('frameborder', '0');
+
+        const obj = new THREE.CSS3DObject(iframe);
+        obj.position.set(0, 5.5, 1.05);
+        const scale = screenWidth / IFRAME_W;
+        obj.scale.set(scale, scale, 1);
+
+        return { obj, iframe };
+    }
+
+    function showIframe(url) {
+        hideIframe();
+        const { obj, iframe } = createIframeObject(url);
+        currentIframeObj = obj;
+        currentIframe = iframe;
+        scene.add(obj);
+
+        screenMesh.visible = false;
+        uiState.mode = 'css3d';
+        clickMode = 'camera';
+        controls.enabled = true;
+    }
+
+    function hideIframe() {
+        if (currentIframeObj) {
+            scene.remove(currentIframeObj);
+            if (currentIframe && currentIframe.parentNode) {
+                currentIframe.parentNode.removeChild(currentIframe);
+            }
+            currentIframeObj = null;
+            currentIframe = null;
+        }
+        clickMode = 'camera';
+        controls.enabled = true;
+        screenMesh.visible = true;
+    }
+
+    // Двойной тап по canvas — переключение режима
+    let lastClickTime = 0;
+    renderer.domElement.addEventListener('click', (e) => {
+        if (uiState.mode !== 'css3d' || !currentIframe) return;
+
+        const now = Date.now();
+        const isDouble = (now - lastClickTime) < 350;
+        lastClickTime = now;
+
+        if (isDouble) {
+            setClickMode(clickMode === 'camera' ? 'iframe' : 'camera');
+        }
+    });
+
+    // ------------------------------------------------------------
+    // HLS + ЛОГИКА
+    // ------------------------------------------------------------
+    let currentHls = null;
+    let sourceLoadTimeout = null;
+    let isLoaded = false;
+    let isPlayingVideo = false;
+    let pendingHandlers = [];
+
+    function detachPendingHandlers() {
+        pendingHandlers.forEach(([ev, fn]) => videoElement.removeEventListener(ev, fn));
+        pendingHandlers = [];
+    }
+
+    function clearVideoElement() {
+        detachPendingHandlers();
+        if (currentHls) { try { currentHls.destroy(); } catch (e) {} currentHls = null; }
+        videoElement.pause();
+        videoElement.removeAttribute('src');
+        try { videoElement.load(); } catch (e) {}
+    }
+
+    function markSource(index, status) {
+        if (uiState.sources[index]) uiState.sources[index].status = status;
+        updateMenuStatus();
+    }
+
+    function showInfo() {
+        uiState.mode = 'info';
+        screenMaterial.map = infoTexture;
+        screenMaterial.needsUpdate = true;
+        screenMesh.visible = true;
+    }
+    function showVideo() {
+        uiState.mode = 'video';
+        screenMaterial.map = videoTexture;
+        screenMaterial.needsUpdate = true;
+        screenMesh.visible = true;
+    }
+
+    function tryPlay() {
+        if (soundEnabled && userInteracted) videoElement.muted = false;
+        else if (!userInteracted) videoElement.muted = true;
+
+        const p = videoElement.play();
+        if (p && p.catch) {
+            p.catch(err => {
+                console.warn('play() failed:', err.name);
+                if (!videoElement.muted) {
+                    videoElement.muted = true;
+                    soundEnabled = false;
+                    updateSoundBtn();
+                    videoElement.play().catch(e2 => {
+                        uiState.statusLine = 'Нажмите для запуска';
+                        playHintEl.classList.remove('hidden');
+                    });
+                } else {
+                    uiState.statusLine = 'Нажмите для запуска';
+                    playHintEl.classList.remove('hidden');
+                }
+            });
+        }
+    }
+
+    function loadSource(index) {
+        if (sourceLoadTimeout) { clearTimeout(sourceLoadTimeout); sourceLoadTimeout = null; }
+
+        if (index >= sources.length) {
+            uiState.currentName = '—';
+            uiState.currentStatus = 'failed';
+            uiState.statusLine = 'Все каналы недоступны';
+            pushLog('❌ Все каналы исчерпаны');
+            isLoaded = false;
+            isPlayingVideo = false;
+            clearVideoElement();
+            hideIframe();
+            showInfo();
+            updateMenuStatus();
+            return;
+        }
+
+        isLoaded = false;
+        isPlayingVideo = false;
+        currentIndex = index;
+        clearVideoElement();
+        hideIframe();
+
+        const source = sources[index];
+        pushLog(`[${index + 1}/${sources.length}] Загрузка: ${source.name}`);
+
+        uiState.currentName = source.name;
+        uiState.currentStatus = 'loading';
+        uiState.statusLine = `Подключение к каналу #${index + 1} из ${sources.length}…`;
+        markSource(index, 'loading');
+        updateMenuStatus();
+
+        if (source.type === 'iframe') {
+            showInfo();
+            setTimeout(() => {
+                showIframe(source.url);
+                uiState.currentStatus = 'playing';
+                uiState.statusLine = `▶ ${source.name}`;
+                markSource(index, 'ready');
+                playHintEl.classList.add('hidden');
+                pushLog(`▶ Iframe загружен: ${source.name}`);
+                showModeHint('👆 Двойной тап по экрану — управление Rutube', false);
+            }, 300);
+            return;
+        }
+
+        showInfo();
+
+        const onReady = () => {
+            if (isLoaded) return;
+            isLoaded = true;
+
+            if (sourceLoadTimeout) { clearTimeout(sourceLoadTimeout); sourceLoadTimeout = null; }
+            detachPendingHandlers();
+
+            pushLog(`✅ Данные получены: ${source.name}`);
+            uiState.currentStatus = 'ready';
+            uiState.statusLine = 'Канал готов, запускаю…';
+            markSource(index, 'ready');
+            tryPlay();
+        };
+
+        const onMeta = () => onReady();
+        const onCanPlay = () => onReady();
+        videoElement.addEventListener('loadedmetadata', onMeta);
+        videoElement.addEventListener('canplay', onCanPlay);
+        pendingHandlers.push(['loadedmetadata', onMeta], ['canplay', onCanPlay]);
+
+        sourceLoadTimeout = setTimeout(() => {
+            sourceLoadTimeout = null;
+            if (!isLoaded) {
+                pushLog(`⏱ Таймаут: ${source.name}`);
+                markSource(index, 'failed');
+                loadSource(index + 1);
+            }
+        }, 36000);
+
+        if (source.type === 'hls') {
+            if (window.Hls && Hls.isSupported()) {
+                const hls = new Hls({
+                    maxBufferLength: 20,
+                    maxMaxBufferLength: 40,
+                    manifestLoadingTimeOut: 30000,
+                    manifestLoadingMaxRetry: 2,
+                    levelLoadingTimeOut: 30000,
+                    levelLoadingMaxRetry: 2,
+                    fragLoadingTimeOut: 60000,
+                    fragLoadingMaxRetry: 3,
+                    enableWorker: true,
+                    lowLatencyMode: false
+                });
+                currentHls = hls;
+
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    pushLog('HLS: манифест разобран');
+                    uiState.statusLine = 'Манифест разобран, буферизация…';
+                });
+
+                hls.on(Hls.Events.FRAG_LOADED, onReady);
+
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    console.warn(`HLS: ${data.type} / ${data.details} (fatal=${data.fatal})`);
+                    if (data.fatal) {
+                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                            pushLog('HLS: сетевая ошибка, переключаюсь');
+                            markSource(index, 'failed');
+                            loadSource(index + 1);
+                        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                            pushLog('HLS: ошибка медиа, пробую восстановить');
+                            try { hls.recoverMediaError(); } catch (e) {
+                                markSource(index, 'failed');
+                                loadSource(index + 1);
+                            }
+                        } else {
+                            pushLog('HLS: fatal ошибка');
+                            markSource(index, 'failed');
+                            loadSource(index + 1);
+                        }
+                    }
+                });
+
+                hls.loadSource(source.url);
+                hls.attachMedia(videoElement);
+            } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                videoElement.src = source.url;
+                videoElement.load();
+            } else {
+                pushLog('HLS не поддерживается');
+                markSource(index, 'failed');
+                loadSource(index + 1);
+            }
+        }
+    }
+
+    videoElement.addEventListener('playing', () => {
+        isPlayingVideo = true;
+        playHintEl.classList.add('hidden');
+        uiState.currentStatus = 'playing';
+        uiState.statusLine = `▶ ${sources[currentIndex].name}`;
+        pushLog(`▶ Играет: ${sources[currentIndex].name}${videoElement.muted ? ' (без звука)' : ''}`);
+        markSource(currentIndex, 'ready');
+        showVideo();
+    });
+
+    videoElement.addEventListener('pause', () => {
+        if (isPlayingVideo) { isPlayingVideo = false; showInfo(); }
+    });
+
+    videoElement.addEventListener('waiting', () => { pushLog('Буферизация…'); });
+
+    videoElement.addEventListener('error', () => {
+        if (!videoElement.currentSrc && !currentHls) return;
+        const err = videoElement.error;
+        pushLog(`Ошибка <video>: ${err ? err.code : '?'}`);
+    });
+
+    document.addEventListener('click', () => {
+        if (!userInteracted) {
+            userInteracted = true;
+            if (!soundEnabled) {
+                enableSound();
+                volumeWrap.classList.add('show');
+                setTimeout(() => volumeWrap.classList.remove('show'), 8000);
+            }
+            if (videoElement.paused && videoElement.readyState >= 2) {
+                tryPlay();
+            }
+        }
+    });
+
+    // ------------------------------------------------------------
+    // АДАПТАЦИЯ
+    // ------------------------------------------------------------
+    window.addEventListener('resize', resizeScene);
+    window.addEventListener('orientationchange', () => {
+        setTimeout(resizeScene, 50);
+        setTimeout(resizeScene, 150);
+        setTimeout(resizeScene, 400);
+    });
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', resizeScene);
+        window.visualViewport.addEventListener('scroll', resizeScene);
+    }
+
+    let lastW = window.innerWidth;
+    let lastH = window.innerHeight;
+
+    // ------------------------------------------------------------
+    // АНИМАЦИЯ
+    // ------------------------------------------------------------
+    let clockTime = 0;
+
+    function animate() {
+        requestAnimationFrame(animate);
+        clockTime += 0.016;
+
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        if (w !== lastW || h !== lastH) {
+            lastW = w;
+            lastH = h;
+            resizeScene();
+        }
+
+        if (uiState.mode === 'info') {
+            uiState.spinner += 0.12;
+            drawInfoPanel(clockTime);
+            infoTexture.needsUpdate = true;
+        }
+
+        if (uiState.mode === 'video' && !videoElement.paused && videoElement.readyState >= 2) {
+            videoTexture.needsUpdate = true;
+        }
+
+        screenGlow.intensity = 1.0 + Math.sin(Date.now() * 0.002) * 0.15;
+        controls.update();
+
+        renderer.render(scene, camera);
+        cssRenderer.render(scene, camera);
+    }
+
+    // ------------------------------------------------------------
+    // СТАРТ
+    // ------------------------------------------------------------
+    loadSourcesFromFile();
+    animate();
 })();
