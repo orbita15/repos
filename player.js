@@ -1,6 +1,7 @@
 // ============================================================
 // player.js — логика уличного кинотеатра
 // Зависит от: THREE, PARKING_SCENE (scene.js), Hls
+// Управление Rutube — клики прямо по экрану (без HTML-панели)
 // ============================================================
 (function () {
     'use strict';
@@ -23,11 +24,78 @@
     const videoElement = document.getElementById('streamVideo');
     videoElement.playsInline = true;
     videoElement.loop = true;
-    videoElement.muted = true;   // ★ звук убран полностью
+    videoElement.volume = 0.7;
 
-    const manageBtn     = document.getElementById('manageBtn');
-    const videoControls = document.getElementById('videoControls');
-    const playHint      = document.getElementById('playHint');
+    const soundBtn     = document.getElementById('soundBtn');
+    const volumeWrap   = document.getElementById('volumeWrap');
+    const volumeSlider = document.getElementById('volumeSlider');
+    const volumeVal    = document.getElementById('volumeVal');
+    const modeHint     = document.getElementById('modeHint');
+    const playHint     = document.getElementById('playHint');
+
+    // --------------------------------------------------------
+    // ЗВУК
+    // --------------------------------------------------------
+    let soundEnabled = false;
+    let userInteracted = false;
+
+    function updateSoundBtn() {
+        if (soundEnabled) {
+            soundBtn.textContent = '🔊';
+            soundBtn.classList.remove('off');
+            soundBtn.classList.add('on');
+            soundBtn.title = 'Выключить звук';
+        } else {
+            soundBtn.textContent = '🔇';
+            soundBtn.classList.remove('on');
+            soundBtn.classList.add('off');
+            soundBtn.title = 'Включить звук';
+        }
+    }
+
+    function enableSound() {
+        soundEnabled = true;
+        videoElement.muted = false;
+        videoElement.volume = parseFloat(volumeSlider.value);
+        videoElement.play().catch(() => {});
+        updateSoundBtn();
+    }
+
+    function disableSound() {
+        soundEnabled = false;
+        videoElement.muted = true;
+        updateSoundBtn();
+    }
+
+    soundBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        userInteracted = true;
+        if (soundEnabled) {
+            disableSound();
+            volumeWrap.classList.remove('show');
+        } else {
+            enableSound();
+            volumeWrap.classList.add('show');
+        }
+    });
+
+    volumeSlider.addEventListener('input', () => {
+        const v = parseFloat(volumeSlider.value);
+        videoElement.volume = v;
+        volumeVal.textContent = Math.round(v * 100) + '%';
+        if (v > 0 && !soundEnabled) enableSound();
+        if (v === 0) videoElement.muted = true;
+        else if (soundEnabled) videoElement.muted = false;
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'm' || e.key === 'M' || e.key === 'ь' || e.key === 'Ь') {
+            if (soundEnabled) disableSound();
+            else enableSound();
+        }
+    });
+
+    updateSoundBtn();
 
     // --------------------------------------------------------
     // ТЕКСТУРЫ ЭКРАНА
@@ -63,7 +131,7 @@
         sources: [],
         log: [],
         spinner: 0,
-        mode: 'info'
+        mode: 'info'    // info | video | css3d
     };
 
     function pushLog(text) {
@@ -126,28 +194,35 @@
         ictx.stroke();
 
         ictx.textAlign = 'left';
+        ictx.font = 'bold 36px Arial';
+        ictx.fillStyle = soundEnabled ? '#4dff9a' : '#ff5b5b';
+        ictx.fillText(soundEnabled ? '🔊' : '🔇', 70, 145);
+        ictx.fillStyle = '#aab6c8';
+        ictx.font = '20px Arial';
+        ictx.fillText(soundEnabled ? 'ЗВУК ВКЛ' : 'ЗВУК ВЫКЛ', 120, 152);
+
         ictx.fillStyle = '#aab6c8';
         ictx.font = '26px Arial';
-        ictx.fillText('ТЕКУЩИЙ КАНАЛ:', 70, 155);
+        ictx.fillText('ТЕКУЩИЙ КАНАЛ:', 70, 195);
 
         ictx.fillStyle = '#ffffff';
         ictx.font = 'bold 42px Arial';
-        ictx.fillText(uiState.currentName, 70, 195);
+        ictx.fillText(uiState.currentName, 70, 235);
 
         const badgeColor = statusColor(uiState.currentStatus);
         ictx.fillStyle = badgeColor + '40';
-        ictx.fillRect(W - 400, 175, 330, 60);
+        ictx.fillRect(W - 400, 215, 330, 60);
         ictx.strokeStyle = badgeColor;
         ictx.lineWidth = 4;
-        ictx.strokeRect(W - 400, 175, 330, 60);
+        ictx.strokeRect(W - 400, 215, 330, 60);
         ictx.fillStyle = badgeColor;
         ictx.font = 'bold 34px Arial';
         ictx.textAlign = 'center';
-        ictx.fillText(statusLabel(uiState.currentStatus), W - 235, 190);
+        ictx.fillText(statusLabel(uiState.currentStatus), W - 235, 230);
 
         if (uiState.currentStatus === 'loading') {
             const cx = W - 440;
-            const cy = 205;
+            const cy = 245;
             ictx.strokeStyle = badgeColor;
             ictx.lineWidth = 6;
             ictx.beginPath();
@@ -158,22 +233,22 @@
         ictx.textAlign = 'left';
         ictx.fillStyle = '#d7e2f0';
         ictx.font = '28px Arial';
-        ictx.fillText(uiState.statusLine, 70, 265);
+        ictx.fillText(uiState.statusLine, 70, 305);
 
         ictx.strokeStyle = 'rgba(120,200,255,0.25)';
         ictx.beginPath();
-        ictx.moveTo(60, 315);
-        ictx.lineTo(W - 60, 315);
+        ictx.moveTo(60, 355);
+        ictx.lineTo(W - 60, 355);
         ictx.stroke();
 
         ictx.fillStyle = '#7ec8ff';
         ictx.font = 'bold 24px Arial';
-        ictx.fillText('СПИСОК КАНАЛОВ:', 70, 335);
+        ictx.fillText('СПИСОК КАНАЛОВ:', 70, 375);
 
         const cols = 2;
         const colW = (W - 140) / cols;
         const rowH = 38;
-        const startY = 368;
+        const startY = 408;
 
         uiState.sources.forEach((s, i) => {
             const col = i % cols;
@@ -370,6 +445,32 @@
     const IFRAME_W = 1280;
     const IFRAME_H = 720;
 
+    // ★ Режим кликов: 'camera' (клики идут в OrbitControls) | 'iframe' (клики идут в Rutube)
+    let clickMode = 'camera';
+
+    function showModeHint(text, isPointer) {
+        modeHint.textContent = text;
+        modeHint.classList.toggle('pointer', !!isPointer);
+        modeHint.classList.add('show');
+        clearTimeout(showModeHint._t);
+        showModeHint._t = setTimeout(() => modeHint.classList.remove('show'), 1800);
+    }
+
+    function setClickMode(mode) {
+        if (clickMode === mode) return;
+        clickMode = mode;
+
+        if (mode === 'iframe') {
+            currentIframe.style.pointerEvents = 'auto';
+            cssRenderer.domElement.style.pointerEvents = 'none';
+            showModeHint('🎮 Управление Rutube — клики на экране', false);
+        } else {
+            currentIframe.style.pointerEvents = 'none';
+            cssRenderer.domElement.style.pointerEvents = 'none';
+            showModeHint('🎥 Управление камерой — перетащите сцену', true);
+        }
+    }
+
     function createIframeObject(url) {
         const iframe = document.createElement('iframe');
         iframe.src = url;
@@ -377,7 +478,6 @@
         iframe.style.height = IFRAME_H + 'px';
         iframe.style.border = 'none';
         iframe.style.background = '#000';
-        // ★ iframe НЕ перехватывает клики — камера работает свободно
         iframe.style.pointerEvents = 'none';
         iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
         iframe.setAttribute('allowfullscreen', 'true');
@@ -402,11 +502,7 @@
 
         screenMesh.visible = false;
         uiState.mode = 'css3d';
-
-        manageBtn.style.display = 'flex';
-        manageBtn.classList.remove('active');
-        manageBtn.textContent = '🎮 УПРАВЛЯТЬ ВИДЕО';
-        videoControls.classList.remove('show');
+        clickMode = 'camera';
     }
 
     function hideIframe() {
@@ -418,30 +514,27 @@
             currentIframeObj = null;
             currentIframe = null;
         }
-        manageBtn.style.display = 'none';
-        manageBtn.classList.remove('active');
         iframeReady = false;
         screenMesh.visible = true;
-        videoControls.classList.remove('show');
+        clickMode = 'camera';
     }
 
-    // ★ Кнопка просто показывает/скрывает панель кнопок.
-    //   OrbitControls НЕ блокируются, iframe НЕ становится кликабельным.
-    manageBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (!currentIframe) return;
+    // ★★ Двойной клик по экрану — переключение режима кликов
+    //     Одинарный клик по экрану — если сейчас режим iframe, он пойдёт в Rutube.
+    //     Двойной клик — переключает. Это позволяет и управлять Rutube, и вернуть камеру.
+    let lastClickTime = 0;
+    renderer.domElement.addEventListener('click', (e) => {
+        if (uiState.mode !== 'css3d' || !currentIframe) return;
 
-        const isOpen = videoControls.classList.contains('show');
-        if (isOpen) {
-            videoControls.classList.remove('show');
-            manageBtn.classList.remove('active');
-            manageBtn.textContent = '🎮 УПРАВЛЯТЬ ВИДЕО';
-            pushLog('Панель управления скрыта');
-        } else {
-            videoControls.classList.add('show');
-            manageBtn.classList.add('active');
-            manageBtn.textContent = '✕ СКРЫТЬ УПРАВЛЕНИЕ';
-            pushLog('Панель управления показана');
+        const now = Date.now();
+        const isDouble = (now - lastClickTime) < 350;
+        lastClickTime = now;
+
+        if (isDouble) {
+            // Двойной клик — переключаем режим
+            setClickMode(clickMode === 'camera' ? 'iframe' : 'camera');
+            e.preventDefault();
+            e.stopPropagation();
         }
     });
 
@@ -469,28 +562,6 @@
             pushLog('✅ Rutube готов к командам');
         }
     });
-
-    // --------------------------------------------------------
-    // ОТПРАВКА КОМАНД В RUTUBE
-    // --------------------------------------------------------
-    function rutubePost(command, data) {
-        if (!currentIframe || !currentIframe.contentWindow) return;
-        const payload = data
-            ? { type: command, data: data }
-            : { type: command };
-        try {
-            currentIframe.contentWindow.postMessage(JSON.stringify(payload), '*');
-        } catch (e) {
-            console.warn('postMessage failed:', e);
-        }
-    }
-
-    function rutubePostRaw(cmd) {
-        if (!currentIframe || !currentIframe.contentWindow) return;
-        try {
-            currentIframe.contentWindow.postMessage(cmd, '*');
-        } catch (e) {}
-    }
 
     // --------------------------------------------------------
     // HLS
@@ -538,13 +609,28 @@
     }
 
     function tryPlay() {
-        videoElement.muted = true;
+        if (soundEnabled && userInteracted) {
+            videoElement.muted = false;
+        } else if (!userInteracted) {
+            videoElement.muted = true;
+        }
+
         const p = videoElement.play();
         if (p && p.catch) {
             p.catch(err => {
                 console.warn('play() failed:', err.name);
-                uiState.statusLine = 'Нажмите для запуска';
-                playHintEl.classList.remove('hidden');
+                if (!videoElement.muted) {
+                    videoElement.muted = true;
+                    soundEnabled = false;
+                    updateSoundBtn();
+                    videoElement.play().catch(e2 => {
+                        uiState.statusLine = 'Нажмите для запуска';
+                        playHintEl.classList.remove('hidden');
+                    });
+                } else {
+                    uiState.statusLine = 'Нажмите для запуска';
+                    playHintEl.classList.remove('hidden');
+                }
             });
         }
     }
@@ -593,6 +679,7 @@
                 markSource(index, 'ready');
                 playHintEl.classList.add('hidden');
                 pushLog(`▶ Iframe загружен: ${source.name}`);
+                showModeHint('👆 Двойной тап по экрану — управление Rutube', false);
             }, 300);
             return;
         }
@@ -696,7 +783,7 @@
         playHintEl.classList.add('hidden');
         uiState.currentStatus = 'playing';
         uiState.statusLine = `▶ ${sources[currentIndex].name}`;
-        pushLog(`▶ Играет: ${sources[currentIndex].name}`);
+        pushLog(`▶ Играет: ${sources[currentIndex].name}${videoElement.muted ? ' (без звука)' : ''}`);
         markSource(currentIndex, 'ready');
         showVideo();
     });
@@ -719,94 +806,17 @@
     });
 
     document.addEventListener('click', () => {
-        if (videoElement.paused && videoElement.readyState >= 2) {
-            tryPlay();
+        if (!userInteracted) {
+            userInteracted = true;
+            if (!soundEnabled) {
+                enableSound();
+                volumeWrap.classList.add('show');
+                setTimeout(() => volumeWrap.classList.remove('show'), 8000);
+            }
+            if (videoElement.paused && videoElement.readyState >= 2) {
+                tryPlay();
+            }
         }
-    });
-
-    // --------------------------------------------------------
-    // КНОПКИ УПРАВЛЕНИЯ ВИДЕО
-    // --------------------------------------------------------
-
-    document.getElementById('vcPlay').addEventListener('click', () => {
-        if (uiState.mode === 'video') {
-            videoElement.play().catch(() => {});
-            pushLog('▶️ HLS Play');
-        } else {
-            rutubePost('player:play');
-            rutubePostRaw('play');
-            pushLog('▶️ Rutube Play');
-        }
-    });
-
-    document.getElementById('vcPause').addEventListener('click', () => {
-        if (uiState.mode === 'video') {
-            videoElement.pause();
-            pushLog('⏸️ HLS Pause');
-        } else {
-            rutubePost('player:pause');
-            rutubePostRaw('pause');
-            pushLog('⏸️ Rutube Pause');
-        }
-    });
-
-    document.getElementById('vcStop').addEventListener('click', () => {
-        if (uiState.mode === 'video') {
-            videoElement.pause();
-            videoElement.currentTime = 0;
-            pushLog('⏹️ HLS Stop');
-        } else {
-            rutubePost('player:stop');
-            rutubePostRaw('stop');
-            pushLog('⏹️ Rutube Stop');
-        }
-    });
-
-    document.getElementById('vcBack10').addEventListener('click', () => {
-        if (uiState.mode === 'video') {
-            videoElement.currentTime = Math.max(0, videoElement.currentTime - 10);
-            pushLog('⏪ HLS -10 сек');
-        } else {
-            rutubePost('player:relativeSeek', { time: -10 });
-            rutubePost('player:seek', { time: -10 });
-            pushLog('⏪ Rutube -10 сек');
-        }
-    });
-
-    document.getElementById('vcFwd10').addEventListener('click', () => {
-        if (uiState.mode === 'video') {
-            videoElement.currentTime = Math.min(videoElement.duration || 0, videoElement.currentTime + 10);
-            pushLog('⏩ HLS +10 сек');
-        } else {
-            rutubePost('player:relativeSeek', { time: 10 });
-            rutubePost('player:seek', { time: 10 });
-            pushLog('⏩ Rutube +10 сек');
-        }
-    });
-
-    document.getElementById('vcFullscreen').addEventListener('click', () => {
-        const target = document.body;
-        if (!document.fullscreenElement) {
-            if (target.requestFullscreen) target.requestFullscreen();
-            else if (target.webkitRequestFullscreen) target.webkitRequestFullscreen();
-            else if (target.msRequestFullscreen) target.msRequestFullscreen();
-            pushLog('⛶ Fullscreen ON');
-        } else {
-            if (document.exitFullscreen) document.exitFullscreen();
-            else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-            else if (document.msExitFullscreen) document.msExitFullscreen();
-            pushLog('⛶ Fullscreen OFF');
-        }
-    });
-
-    document.addEventListener('fullscreenchange', () => setTimeout(resizeScene, 100));
-    document.addEventListener('webkitfullscreenchange', () => setTimeout(resizeScene, 100));
-
-    document.getElementById('vcClose').addEventListener('click', () => {
-        videoControls.classList.remove('show');
-        manageBtn.classList.remove('active');
-        manageBtn.textContent = '🎮 УПРАВЛЯТЬ ВИДЕО';
-        pushLog('Панель управления скрыта');
     });
 
     // --------------------------------------------------------
