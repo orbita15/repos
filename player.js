@@ -1,16 +1,13 @@
 // ============================================================
-// player.js — логика уличного кинотеатра
-// Зависит от: THREE, PARKING_SCENE (scene.js), Hls
-// Управление Rutube — клики прямо по экрану (без HTML-панели)
+// player.js — логика плеера
+// Зависит от: THREE, PARKING_SCENE, Hls, SOURCES
 // ============================================================
+
 (function () {
     'use strict';
 
     const S = window.PARKING_SCENE;
-    if (!S) {
-        console.error('scene.js не загружен!');
-        return;
-    }
+    if (!S) { console.error('scene.js не загружен!'); return; }
 
     const {
         scene, camera, renderer, cssRenderer, controls,
@@ -18,9 +15,6 @@
         resize: resizeScene
     } = S;
 
-    // --------------------------------------------------------
-    // ХОТКЕИ
-    // --------------------------------------------------------
     const videoElement = document.getElementById('streamVideo');
     videoElement.playsInline = true;
     videoElement.loop = true;
@@ -30,12 +24,9 @@
     const volumeWrap   = document.getElementById('volumeWrap');
     const volumeSlider = document.getElementById('volumeSlider');
     const volumeVal    = document.getElementById('volumeVal');
-    const modeHint     = document.getElementById('modeHint');
     const playHint     = document.getElementById('playHint');
 
-    // --------------------------------------------------------
-    // ЗВУК
-    // --------------------------------------------------------
+    // --- Звук ---
     let soundEnabled = false;
     let userInteracted = false;
 
@@ -97,9 +88,7 @@
 
     updateSoundBtn();
 
-    // --------------------------------------------------------
-    // ТЕКСТУРЫ ЭКРАНА
-    // --------------------------------------------------------
+    // --- Текстуры ---
     const videoTexture = new THREE.VideoTexture(videoElement);
     videoTexture.minFilter = THREE.LinearFilter;
     videoTexture.magFilter = THREE.LinearFilter;
@@ -120,9 +109,6 @@
     screenMaterial.map = infoTexture;
     screenMaterial.needsUpdate = true;
 
-    // --------------------------------------------------------
-    // СОСТОЯНИЕ UI
-    // --------------------------------------------------------
     const uiState = {
         title: 'УЛИЧНЫЙ КИНОТЕАТР',
         statusLine: 'Запуск…',
@@ -131,7 +117,7 @@
         sources: [],
         log: [],
         spinner: 0,
-        mode: 'info'    // info | video | css3d
+        mode: 'info'
     };
 
     function pushLog(text) {
@@ -160,9 +146,6 @@
         }
     }
 
-    // --------------------------------------------------------
-    // ИНФО-ПАНЕЛЬ
-    // --------------------------------------------------------
     function drawInfoPanel(t) {
         const W = infoCanvas.width;
         const H = infoCanvas.height;
@@ -313,9 +296,7 @@
         ictx.textAlign = 'left';
     }
 
-    // --------------------------------------------------------
-    // ЗАГРУЗКА КАНАЛОВ
-    // --------------------------------------------------------
+    // --- Меню ---
     const playHintEl = playHint;
     const menuToggle = document.getElementById('menuToggle');
     const menuClose = document.getElementById('menuClose');
@@ -323,50 +304,20 @@
     const channelList = document.getElementById('channelList');
     const menuOverlay = document.getElementById('menuOverlay');
 
-    let sources = [];
+    const sources = window.SOURCES || [];
     let currentIndex = 0;
 
-    async function loadSourcesFromFile() {
-        try {
-            const resp = await fetch('sources.json', { cache: 'no-store' });
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            const data = await resp.json();
-
-            const flat = [];
-            (data.groups || []).forEach(g => {
-                (g.items || []).forEach(it => {
-                    flat.push({ group: g.title, type: it.type, url: it.url, name: it.name });
-                });
-            });
-            sources = flat;
-
-            uiState.sources = sources.map(s => ({ name: s.name, status: 'waiting' }));
-            buildChannelMenu();
-            pushLog(`✅ Загружено каналов: ${sources.length}`);
-            loadSource(0);
-        } catch (e) {
-            console.error('Не удалось загрузить sources.json:', e);
-            pushLog('❌ sources.json не загружен: ' + e.message);
-            uiState.statusLine = 'Ошибка загрузки sources.json';
-            sources = [
-                { type: 'iframe', url: 'https://rutube.ru/play/embed/20872670', name: 'Rutube (по умолчанию)' }
-            ];
-            uiState.sources = sources.map(s => ({ name: s.name, status: 'waiting' }));
-            buildChannelMenu();
-            loadSource(0);
-        }
-    }
-
-    // --------------------------------------------------------
-    // МЕНЮ
-    // --------------------------------------------------------
     function buildChannelMenu() {
         channelList.innerHTML = '';
         let lastGroup = null;
 
         sources.forEach((src, i) => {
-            const group = src.group || '';
-            if (group && group !== lastGroup) {
+            let group;
+            if (i < 4) group = '🎬 Rutube';
+            else if (i < 12) group = '🇷🇺 Российские';
+            else group = '🌍 Международные';
+
+            if (group !== lastGroup) {
                 const h = document.createElement('div');
                 h.className = 'channelGroup';
                 h.textContent = group;
@@ -394,10 +345,7 @@
             item.appendChild(type);
 
             item.addEventListener('click', () => {
-                if (i === currentIndex && isLoaded) {
-                    closeMenu();
-                    return;
-                }
+                if (i === currentIndex && isLoaded) { closeMenu(); return; }
                 loadSource(i);
                 closeMenu();
             });
@@ -419,57 +367,22 @@
         });
     }
 
-    function openMenu() {
-        channelMenu.classList.add('open');
-        menuOverlay.classList.add('show');
-    }
-    function closeMenu() {
-        channelMenu.classList.remove('open');
-        menuOverlay.classList.remove('show');
-    }
+    function openMenu() { channelMenu.classList.add('open'); menuOverlay.classList.add('show'); }
+    function closeMenu() { channelMenu.classList.remove('open'); menuOverlay.classList.remove('show'); }
 
     menuToggle.addEventListener('click', openMenu);
     menuClose.addEventListener('click', closeMenu);
     menuOverlay.addEventListener('click', closeMenu);
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeMenu();
-    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 
-    // --------------------------------------------------------
-    // IFRAME (CSS3D)
-    // --------------------------------------------------------
-    let currentIframe = null;
-    let currentIframeObj = null;
-    let iframeReady = false;
+    uiState.sources = sources.map(s => ({ name: s.name, status: 'waiting' }));
+
+    // --- Iframe ---
+    let currentIframe     = null;
+    let currentIframeObj  = null;
 
     const IFRAME_W = 1280;
     const IFRAME_H = 720;
-
-    // ★ Режим кликов: 'camera' (клики идут в OrbitControls) | 'iframe' (клики идут в Rutube)
-    let clickMode = 'camera';
-
-    function showModeHint(text, isPointer) {
-        modeHint.textContent = text;
-        modeHint.classList.toggle('pointer', !!isPointer);
-        modeHint.classList.add('show');
-        clearTimeout(showModeHint._t);
-        showModeHint._t = setTimeout(() => modeHint.classList.remove('show'), 1800);
-    }
-
-    function setClickMode(mode) {
-        if (clickMode === mode) return;
-        clickMode = mode;
-
-        if (mode === 'iframe') {
-            currentIframe.style.pointerEvents = 'auto';
-            cssRenderer.domElement.style.pointerEvents = 'none';
-            showModeHint('🎮 Управление Rutube — клики на экране', false);
-        } else {
-            currentIframe.style.pointerEvents = 'none';
-            cssRenderer.domElement.style.pointerEvents = 'none';
-            showModeHint('🎥 Управление камерой — перетащите сцену', true);
-        }
-    }
 
     function createIframeObject(url) {
         const iframe = document.createElement('iframe');
@@ -478,7 +391,9 @@
         iframe.style.height = IFRAME_H + 'px';
         iframe.style.border = 'none';
         iframe.style.background = '#000';
-        iframe.style.pointerEvents = 'none';
+        // ★ Iframe-каналы: клики по iframe разрешены ВСЕГДА
+        //   Управление камерой для них отключается
+        iframe.style.pointerEvents = 'auto';
         iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
         iframe.setAttribute('allowfullscreen', 'true');
         iframe.setAttribute('frameborder', '0');
@@ -493,8 +408,6 @@
 
     function showIframe(url) {
         hideIframe();
-        iframeReady = false;
-
         const { obj, iframe } = createIframeObject(url);
         currentIframeObj = obj;
         currentIframe = iframe;
@@ -502,7 +415,8 @@
 
         screenMesh.visible = false;
         uiState.mode = 'css3d';
-        clickMode = 'camera';
+        // ★ Камера отключена — все клики идут в Rutube
+        controls.enabled = false;
     }
 
     function hideIframe() {
@@ -514,58 +428,12 @@
             currentIframeObj = null;
             currentIframe = null;
         }
-        iframeReady = false;
+        // ★ Камера снова активна
+        controls.enabled = true;
         screenMesh.visible = true;
-        clickMode = 'camera';
     }
 
-    // ★★ Двойной клик по экрану — переключение режима кликов
-    //     Одинарный клик по экрану — если сейчас режим iframe, он пойдёт в Rutube.
-    //     Двойной клик — переключает. Это позволяет и управлять Rutube, и вернуть камеру.
-    let lastClickTime = 0;
-    renderer.domElement.addEventListener('click', (e) => {
-        if (uiState.mode !== 'css3d' || !currentIframe) return;
-
-        const now = Date.now();
-        const isDouble = (now - lastClickTime) < 350;
-        lastClickTime = now;
-
-        if (isDouble) {
-            // Двойной клик — переключаем режим
-            setClickMode(clickMode === 'camera' ? 'iframe' : 'camera');
-            e.preventDefault();
-            e.stopPropagation();
-        }
-    });
-
-    // --------------------------------------------------------
-    // СОБЫТИЯ ОТ RUTUBE
-    // --------------------------------------------------------
-    window.addEventListener('message', (event) => {
-        let type = null;
-        try {
-            if (typeof event.data === 'string') {
-                if (event.data.startsWith('{')) {
-                    const parsed = JSON.parse(event.data);
-                    type = parsed.type || parsed.event;
-                } else {
-                    type = event.data;
-                }
-            } else if (event.data && typeof event.data === 'object') {
-                type = event.data.type || event.data.event;
-            }
-        } catch (e) {}
-        if (!type) return;
-
-        if (type === 'player:ready') {
-            iframeReady = true;
-            pushLog('✅ Rutube готов к командам');
-        }
-    });
-
-    // --------------------------------------------------------
-    // HLS
-    // --------------------------------------------------------
+    // --- HLS ---
     let currentHls = null;
     let sourceLoadTimeout = null;
     let isLoaded = false;
@@ -579,19 +447,14 @@
 
     function clearVideoElement() {
         detachPendingHandlers();
-        if (currentHls) {
-            try { currentHls.destroy(); } catch (e) {}
-            currentHls = null;
-        }
+        if (currentHls) { try { currentHls.destroy(); } catch (e) {} currentHls = null; }
         videoElement.pause();
         videoElement.removeAttribute('src');
         try { videoElement.load(); } catch (e) {}
     }
 
     function markSource(index, status) {
-        if (uiState.sources[index]) {
-            uiState.sources[index].status = status;
-        }
+        if (uiState.sources[index]) uiState.sources[index].status = status;
         updateMenuStatus();
     }
 
@@ -600,20 +463,19 @@
         screenMaterial.map = infoTexture;
         screenMaterial.needsUpdate = true;
         screenMesh.visible = true;
+        controls.enabled = true;
     }
     function showVideo() {
         uiState.mode = 'video';
         screenMaterial.map = videoTexture;
         screenMaterial.needsUpdate = true;
         screenMesh.visible = true;
+        controls.enabled = true;
     }
 
     function tryPlay() {
-        if (soundEnabled && userInteracted) {
-            videoElement.muted = false;
-        } else if (!userInteracted) {
-            videoElement.muted = true;
-        }
+        if (soundEnabled && userInteracted) videoElement.muted = false;
+        else if (!userInteracted) videoElement.muted = true;
 
         const p = videoElement.play();
         if (p && p.catch) {
@@ -636,10 +498,7 @@
     }
 
     function loadSource(index) {
-        if (sourceLoadTimeout) {
-            clearTimeout(sourceLoadTimeout);
-            sourceLoadTimeout = null;
-        }
+        if (sourceLoadTimeout) { clearTimeout(sourceLoadTimeout); sourceLoadTimeout = null; }
 
         if (index >= sources.length) {
             uiState.currentName = '—';
@@ -679,7 +538,6 @@
                 markSource(index, 'ready');
                 playHintEl.classList.add('hidden');
                 pushLog(`▶ Iframe загружен: ${source.name}`);
-                showModeHint('👆 Двойной тап по экрану — управление Rutube', false);
             }, 300);
             return;
         }
@@ -690,10 +548,7 @@
             if (isLoaded) return;
             isLoaded = true;
 
-            if (sourceLoadTimeout) {
-                clearTimeout(sourceLoadTimeout);
-                sourceLoadTimeout = null;
-            }
+            if (sourceLoadTimeout) { clearTimeout(sourceLoadTimeout); sourceLoadTimeout = null; }
             detachPendingHandlers();
 
             pushLog(`✅ Данные получены: ${source.name}`);
@@ -718,20 +573,17 @@
             }
         }, 36000);
 
-        if (source.type === 'mp4') {
-            videoElement.src = source.url;
-            videoElement.load();
-        } else if (source.type === 'hls') {
+        if (source.type === 'hls') {
             if (window.Hls && Hls.isSupported()) {
                 const hls = new Hls({
                     maxBufferLength: 20,
                     maxMaxBufferLength: 40,
                     manifestLoadingTimeOut: 30000,
                     manifestLoadingMaxRetry: 2,
-                    levelLoadingTimeOut:    30000,
-                    levelLoadingMaxRetry:   2,
-                    fragLoadingTimeOut:     60000,
-                    fragLoadingMaxRetry:    3,
+                    levelLoadingTimeOut: 30000,
+                    levelLoadingMaxRetry: 2,
+                    fragLoadingTimeOut: 60000,
+                    fragLoadingMaxRetry: 3,
                     enableWorker: true,
                     lowLatencyMode: false
                 });
@@ -789,15 +641,10 @@
     });
 
     videoElement.addEventListener('pause', () => {
-        if (isPlayingVideo) {
-            isPlayingVideo = false;
-            showInfo();
-        }
+        if (isPlayingVideo) { isPlayingVideo = false; showInfo(); }
     });
 
-    videoElement.addEventListener('waiting', () => {
-        pushLog('Буферизация…');
-    });
+    videoElement.addEventListener('waiting', () => { pushLog('Буферизация…'); });
 
     videoElement.addEventListener('error', () => {
         if (!videoElement.currentSrc && !currentHls) return;
@@ -819,9 +666,7 @@
         }
     });
 
-    // --------------------------------------------------------
-    // АДАПТАЦИЯ
-    // --------------------------------------------------------
+    // --- Адаптация ---
     window.addEventListener('resize', resizeScene);
     window.addEventListener('orientationchange', () => {
         setTimeout(resizeScene, 50);
@@ -836,9 +681,7 @@
     let lastW = window.innerWidth;
     let lastH = window.innerHeight;
 
-    // --------------------------------------------------------
-    // АНИМАЦИЯ
-    // --------------------------------------------------------
+    // --- Анимация ---
     let clockTime = 0;
 
     function animate() {
@@ -859,21 +702,18 @@
             infoTexture.needsUpdate = true;
         }
 
-        if (uiState.mode === 'video' && !videoElement.paused &&
-            videoElement.readyState >= 2) {
+        if (uiState.mode === 'video' && !videoElement.paused && videoElement.readyState >= 2) {
             videoTexture.needsUpdate = true;
         }
 
-        if (screenGlow) screenGlow.intensity = 1.0 + Math.sin(Date.now() * 0.002) * 0.15;
+        screenGlow.intensity = 1.0 + Math.sin(Date.now() * 0.002) * 0.15;
         controls.update();
 
         renderer.render(scene, camera);
         cssRenderer.render(scene, camera);
     }
 
-    // --------------------------------------------------------
-    // СТАРТ
-    // --------------------------------------------------------
-    loadSourcesFromFile();
+    buildChannelMenu();
+    loadSource(0);
     animate();
 })();
