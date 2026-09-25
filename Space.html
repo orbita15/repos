@@ -1,1 +1,1357 @@
-Tesr7
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Три сферы из частиц — космос</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;touch-action:none}
+  canvas{display:block;touch-action:none}
+  #hint{position:fixed;left:12px;bottom:12px;color:#8fa8d8;
+    font:12px/1.4 system-ui,sans-serif;opacity:.6;
+    pointer-events:none;user-select:none;text-shadow:0 0 6px #000}
+</style>
+</head>
+<body>
+<div id="hint">Свайп — камера · Щипок — зум · 3 тапа по сфере — взрыв · все три → слияние · тап по точке — искры</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============================================================
+   СЦЕНА / КАМЕРА / РЕНДЕР
+   ============================================================ */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000004);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 8000);
+camera.position.set(0, 14, 48);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+document.body.appendChild(renderer.domElement);
+
+/* ============================================================
+   КАМЕРА
+   ============================================================ */
+const el = renderer.domElement;
+let camTheta = 0, camPhi = Math.PI/2 - 0.22, camDist = 55;
+let tTheta = camTheta, tPhi = camPhi, tDist = camDist;
+const MIN_D = 12, MAX_D = 300;
+let autoRotate = true;
+
+let dragging = false, lastX = 0, lastY = 0;
+let pinchStart = 0, pinchDistStart = 0, pinchActive = false;
+let downX = 0, downY = 0, downTime = 0;
+const TAP_MAX_DIST = 12, TAP_MAX_TIME = 450;
+
+el.addEventListener('pointerdown', e => {
+  if (pinchActive) return;
+  dragging = true;
+  lastX = e.clientX; lastY = e.clientY;
+  downX = e.clientX; downY = e.clientY;
+  downTime = performance.now();
+  autoRotate = false;
+  if (el.setPointerCapture) el.setPointerCapture(e.pointerId);
+});
+el.addEventListener('pointermove', e => {
+  if (!dragging || pinchActive) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  tTheta -= dx * 0.005;
+  tPhi   -= dy * 0.005;
+  tPhi = Math.max(0.15, Math.min(Math.PI - 0.15, tPhi));
+});
+function endDrag(){ dragging = false; setTimeout(() => { autoRotate = true; }, 1500); }
+el.addEventListener('pointerup', e => {
+  if (pinchActive){ endDrag(); return; }
+  if (dragging){
+    const dx = e.clientX - downX, dy = e.clientY - downY;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const time = performance.now() - downTime;
+    if (dist < TAP_MAX_DIST && time < TAP_MAX_TIME) handleTap(e.clientX, e.clientY);
+  }
+  endDrag();
+});
+el.addEventListener('pointercancel', endDrag);
+
+el.addEventListener('touchstart', e => {
+  if (e.touches.length === 2){
+    dragging = false; pinchActive = true; autoRotate = false;
+    pinchStart = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    pinchDistStart = tDist;
+  }
+}, {passive:true});
+el.addEventListener('touchmove', e => {
+  if (pinchActive && e.touches.length === 2){
+    const d = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    tDist = pinchDistStart * (pinchStart / Math.max(d, 1));
+    tDist = Math.max(MIN_D, Math.min(MAX_D, tDist));
+    e.preventDefault();
+  }
+}, {passive:false});
+el.addEventListener('touchend', e => {
+  if (e.touches.length < 2) pinchActive = false;
+  if (e.touches.length === 0) endDrag();
+});
+el.addEventListener('wheel', e => {
+  tDist += e.deltaY * 0.05;
+  tDist = Math.max(MIN_D, Math.min(MAX_D, tDist));
+}, {passive:true});
+
+/* ============================================================
+   СПРАЙТ-ТЕКСТУРЫ
+   ============================================================ */
+function makeDotTexture(){
+  const s = 64;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(s/2,s/2,0, s/2,s/2,s/2);
+  g.addColorStop(0.00,'rgba(255,255,255,1)');
+  g.addColorStop(0.25,'rgba(255,255,255,0.85)');
+  g.addColorStop(0.55,'rgba(255,255,255,0.20)');
+  g.addColorStop(1.00,'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,s,s);
+  const t = new THREE.CanvasTexture(cv);
+  t.encoding = THREE.sRGBEncoding;
+  return t;
+}
+const dotTex  = makeDotTexture();
+const glowTex = makeDotTexture();
+
+/* ============================================================
+   ЗВЁЗДЫ
+   ============================================================ */
+function createStars(count, rMin, rMax, size, useColor){
+  const pos = new Float32Array(count*3);
+  const col = new Float32Array(count*3);
+  const c = new THREE.Color();
+  for (let i=0;i<count;i++){
+    const r = rMin + Math.random()*(rMax - rMin);
+    const u = Math.random()*2 - 1;
+    const th = Math.random()*Math.PI*2;
+    const s = Math.sqrt(1 - u*u);
+    pos[i*3]   = Math.cos(th)*s*r;
+    pos[i*3+1] = u*r;
+    pos[i*3+2] = Math.sin(th)*s*r;
+    if (useColor){
+      const t = Math.random();
+      if (t < 0.72)      c.setHSL(0.58 + Math.random()*0.08, 0.15 + Math.random()*0.35, 0.75 + Math.random()*0.25);
+      else if (t < 0.88) c.setHSL(0.07 + Math.random()*0.04, 0.55, 0.75);
+      else               c.setHSL(0.76 + Math.random()*0.05, 0.60, 0.80);
+      col[i*3] = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
+    } else {
+      col[i*3] = col[i*3+1] = col[i*3+2] = 1;
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.PointsMaterial({
+    size: size, sizeAttenuation: false, map: dotTex,
+    vertexColors: true, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  return new THREE.Points(geo, mat);
+}
+scene.add(createStars(9000, 700, 2500, 2.0, true));
+scene.add(createStars(250,  600, 2000, 7.0, false));
+
+/* ТУМАННОСТИ */
+(function(){
+  const colors = [0x2b1a6b, 0x1a3a6b, 0x6b1a4a, 0x1f6b7a, 0x7a3a1a, 0x4a1a7a];
+  for (let i = 0; i < 60; i++){
+    const mat = new THREE.SpriteMaterial({
+      map: glowTex,
+      color: colors[(Math.random()*colors.length)|0],
+      transparent: true, opacity: 0.05 + Math.random()*0.09,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const sp = new THREE.Sprite(mat);
+    const r = 900 + Math.random()*900;
+    const u = Math.random()*2 - 1;
+    const th = Math.random()*Math.PI*2;
+    const s = Math.sqrt(1 - u*u);
+    sp.position.set(Math.cos(th)*s*r, u*r*0.7, Math.sin(th)*s*r);
+    sp.scale.setScalar(450 + Math.random()*750);
+    mat.rotation = Math.random()*Math.PI*2;
+    scene.add(sp);
+  }
+})();
+
+/* СВЕТ */
+scene.add(new THREE.AmbientLight(0x2a3a5a, 1.8));
+const dl = new THREE.DirectionalLight(0xbfd4ff, 2.4);
+dl.position.set(1, 0.55, 0.7);
+scene.add(dl);
+
+/* ПЛАНЕТЫ */
+const planets = [];
+function addPlanet(radius, dist, color, emissive, speed, tiltX, tiltZ, ring){
+  const tiltG = new THREE.Group();
+  tiltG.rotation.set(tiltX*Math.PI/180, 0, tiltZ*Math.PI/180);
+  const spinG = new THREE.Group();
+  tiltG.add(spinG);
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 40, 28),
+    new THREE.MeshStandardMaterial({
+      color: color, emissive: emissive, emissiveIntensity: 1.0,
+      roughness: 0.85, metalness: 0.15
+    })
+  );
+  mesh.position.x = dist;
+  spinG.add(mesh);
+  if (ring){
+    const rg = new THREE.Mesh(
+      new THREE.RingGeometry(radius*1.5, radius*2.6, 96),
+      new THREE.MeshBasicMaterial({
+        color: 0x9fb8e0, side: THREE.DoubleSide,
+        transparent: true, opacity: 0.28,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      })
+    );
+    rg.rotation.x = Math.PI/2;
+    mesh.add(rg);
+  }
+  scene.add(tiltG);
+  planets.push({
+    spinG, mesh, speed, self: 0.12 + Math.random()*0.25,
+    radius: radius, flash: 0
+  });
+}
+addPlanet(9,  150, 0x2f5fa8, 0x0a1a3a,  0.050,  12,  -8, false);
+addPlanet(6,  225, 0xa8543a, 0x2a0f08, -0.036, -22,  16, true );
+addPlanet(13, 315, 0x6a4fa0, 0x150a2a,  0.022,  30,  26, false);
+addPlanet(4,  105, 0x9ad0c8, 0x0d2a28,  0.070,  -8, -20, false);
+
+/* ============================================================
+   СФЕРА ИЗ ЧАСТИЦ
+   ============================================================ */
+function particleSphere(radius, count, color, size){
+  const pos = new Float32Array(count*3);
+  const col = new Float32Array(count*3);
+  const base = new THREE.Color(color);
+  const tmp  = new THREE.Color();
+  const GOLD = Math.PI * (3 - Math.sqrt(5));
+
+  for (let i = 0; i < count; i++){
+    const y = 1 - (i / (count - 1)) * 2;
+    const rad = Math.sqrt(Math.max(0, 1 - y*y));
+    const th = GOLD * i;
+    const nx = Math.cos(th) * rad;
+    const ny = y;
+    const nz = Math.sin(th) * rad;
+    const lump = 0.5 + 0.5 * Math.sin(nx*5.3 + ny*3.1) * Math.cos(nz*4.7 - ny*2.3);
+    const shell = Math.random() < 0.78;
+    const r = shell
+      ? radius * (0.84 + 0.30 * lump)
+      : radius * Math.pow(Math.random(), 0.65) * 0.88;
+    pos[i*3]   = nx * r;
+    pos[i*3+1] = ny * r;
+    pos[i*3+2] = nz * r;
+    const b = shell ? (0.55 + 0.75*lump) : (0.10 + 0.30*Math.random());
+    tmp.copy(base).multiplyScalar(b);
+    col[i*3]   = tmp.r;
+    col[i*3+1] = tmp.g;
+    col[i*3+2] = tmp.b;
+  }
+
+  const geo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(pos, 3);
+  posAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', posAttr);
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+
+  const mat = new THREE.PointsMaterial({
+    size: size, map: dotTex, vertexColors: true, transparent: true,
+    depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true
+  });
+
+  return new THREE.Points(geo, mat);
+}
+
+/* ============================================================
+   СИСТЕМА ИЗ ТРЁХ СФЕР
+   ============================================================ */
+const system = new THREE.Group();
+system.rotation.x = 14 * Math.PI/180;
+scene.add(system);
+
+const PALETTE = [0x35d6ff, 0xff4fd8, 0xffc247];
+const ORBIT_R = 16, SPH_R = 6.2;
+const spheres = [];
+
+for (let i = 0; i < 3; i++){
+  const holder = new THREE.Group();
+  const a = (i / 3) * Math.PI * 2;
+  holder.position.set(Math.cos(a)*ORBIT_R, 0, Math.sin(a)*ORBIT_R);
+
+  const pts = particleSphere(SPH_R, 6500, PALETTE[i], 0.34);
+  holder.add(pts);
+
+  const core = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: PALETTE[i], transparent: true, opacity: 0.30,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  core.scale.setScalar(SPH_R * 2.4);
+  holder.add(core);
+
+  const burst = new THREE.PointLight(PALETTE[i], 0, 40);
+  holder.add(burst);
+
+  system.add(holder);
+
+  const initialPositions = new Float32Array(pts.geometry.attributes.position.array);
+
+  spheres.push({
+    holder: holder, pts: pts, core: core, burst: burst,
+    homeAngle: a,
+    phase: Math.random()*Math.PI*2,
+    bob: 0.5 + Math.random()*0.5,
+    sx: 0.18 + Math.random()*0.25,
+    sy: 0.30 + Math.random()*0.35,
+    tapCount: 0, lastTapTime: 0, flashPulse: 0,
+    exploding: false, explodeT: 0,
+    origPositions: null, explodeDirs: null,
+    initialPositions: initialPositions,
+    _mergeStartScale: 1,
+    _mergeStartCore: 1,
+    _mergeStartOpacity: 0.3
+  });
+}
+
+/* ============================================================
+   ВСПЫШКА СЛИЯНИЯ
+   ============================================================ */
+const mergeFlash = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTex, color: 0xffffff, transparent: true, opacity: 0,
+  blending: THREE.AdditiveBlending, depthWrite: false
+}));
+mergeFlash.position.set(0, 0, 0);
+mergeFlash.scale.setScalar(0.1);
+mergeFlash.visible = false;
+scene.add(mergeFlash);
+
+const mergeLight = new THREE.PointLight(0xffffff, 0, 250);
+mergeLight.position.set(0, 0, 0);
+scene.add(mergeLight);
+
+/* ============================================================
+   ПУЛЬСИРУЮЩАЯ ТОЧКА
+   ============================================================ */
+const coreSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTex, color: 0xffffff, transparent: true, opacity: 1,
+  blending: THREE.AdditiveBlending, depthWrite: false
+}));
+coreSprite.position.set(0, 0, 0);
+coreSprite.scale.setScalar(4);
+coreSprite.visible = false;
+scene.add(coreSprite);
+
+const coreSprite2 = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTex, color: 0x66ccff, transparent: true, opacity: 1,
+  blending: THREE.AdditiveBlending, depthWrite: false
+}));
+coreSprite2.position.set(0, 0, 0);
+coreSprite2.scale.setScalar(2);
+coreSprite2.visible = false;
+scene.add(coreSprite2);
+
+const coreLight = new THREE.PointLight(0x88aaff, 0, 60);
+coreLight.position.set(0, 0, 0);
+coreLight.visible = false;
+scene.add(coreLight);
+
+/* ============================================================
+   ОБЩИЕ ШЕЙДЕРЫ ДЛЯ ЧАСТИЦ
+   ============================================================ */
+const PARTICLE_VERT = `
+  attribute vec3 aColor;
+  attribute float aSize;
+  attribute float aSeed;
+  varying vec3 vColor;
+  varying float vSeed;
+  uniform float u_time;
+  uniform float u_pixelRatio;
+  void main(){
+    vColor = aColor;
+    vSeed = aSeed;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    float twinkle = 0.55 + 0.45 * sin(u_time * 4.0 + aSeed * 6.28);
+    float pulse   = 0.85 + 0.15 * sin(u_time * 2.0 + aSeed * 3.14);
+    gl_PointSize = aSize * twinkle * pulse * u_pixelRatio * (95.0 / -mv.z);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+const PARTICLE_FRAG = `
+  precision highp float;
+  varying vec3 vColor;
+  varying float vSeed;
+  uniform float u_time;
+  uniform float u_opacity;
+  void main(){
+    vec2 uv = gl_PointCoord - 0.5;
+    float d = length(uv);
+    if (d > 0.5) discard;
+    float alpha = pow(smoothstep(0.5, 0.0, d), 2.0) * u_opacity;
+    float core  = smoothstep(0.12, 0.0, d);
+    vec3 col = vColor + vec3(core * 0.5);
+    float gtw = 0.75 + 0.25 * sin(u_time * 6.0 + vSeed * 12.0);
+    gl_FragColor = vec4(col * 1.3 * gtw, alpha);
+  }
+`;
+
+/* ============================================================
+   ВЗРЫВ ИСКР + КЛАСТЕРЫ
+   ============================================================ */
+const BURST_N = 3500;
+const NUM_CLUSTERS = 6;
+
+const clusters = [];
+for (let i = 0; i < NUM_CLUSTERS; i++){
+  clusters.push({
+    baseAngle: (i / NUM_CLUSTERS) * Math.PI * 2,
+    orbitR: 10 + Math.random() * 8,
+    orbitSpeed: (0.25 + Math.random() * 0.20) * (Math.random() < 0.5 ? 1 : -1),
+    yAmp: 2 + Math.random() * 3,
+    ySpeed: 0.4 + Math.random() * 0.5,
+    yPhase: Math.random() * Math.PI * 2,
+    spinSpeed: (0.7 + Math.random() * 0.7) * (Math.random() < 0.5 ? 1 : -1),
+    radius: 3.5 + Math.random() * 2
+  });
+}
+
+const bPos  = new Float32Array(BURST_N * 3);
+const bCol  = new Float32Array(BURST_N * 3);
+const bSize = new Float32Array(BURST_N);
+const bSeed = new Float32Array(BURST_N);
+
+const bVel        = new Float32Array(BURST_N * 3);
+const bCluster    = new Uint16Array(BURST_N);
+const bLocalAngle = new Float32Array(BURST_N);
+const bLocalR     = new Float32Array(BURST_N);
+const bLocalY     = new Float32Array(BURST_N);
+const bLocalSpin  = new Float32Array(BURST_N);
+
+/* куда и как частица садится на планету */
+const bFlyR     = new Float32Array(BURST_N);
+const bFlyA     = new Float32Array(BURST_N);
+const bFlyY     = new Float32Array(BURST_N);
+const bFlySpin  = new Float32Array(BURST_N);
+const bFlyDelay = new Float32Array(BURST_N);
+
+function initBurstParticles(){
+  const c = new THREE.Color();
+  for (let i = 0; i < BURST_N; i++){
+    const i3 = i*3;
+    const ci = i % NUM_CLUSTERS;
+    bCluster[i] = ci;
+    const cl = clusters[ci];
+    bLocalAngle[i] = Math.random() * Math.PI * 2;
+    bLocalR[i]     = Math.pow(Math.random(), 0.6) * cl.radius;
+    bLocalY[i]     = (Math.random() - 0.5) * cl.radius * 0.9;
+    bLocalSpin[i]  = 0.7 + Math.random() * 0.6;
+
+    bFlyR[i]     = 1.45 + Math.random() * 1.55;
+    bFlyA[i]     = Math.random() * Math.PI * 2;
+    bFlyY[i]     = (Math.random() - 0.5) * 2.4;
+    bFlySpin[i]  = (0.35 + Math.random() * 0.85) * (Math.random() < 0.5 ? 1 : -1);
+    bFlyDelay[i] = Math.random() * 1.0;
+
+    bPos[i3] = 0; bPos[i3+1] = 0; bPos[i3+2] = 0;
+
+    const hue = Math.random();
+    c.setHSL(hue, 0.85, 0.62);
+    bCol[i3]   = c.r;
+    bCol[i3+1] = c.g;
+    bCol[i3+2] = c.b;
+
+    bSize[i] = 1.6 + Math.random() * 2.4;
+    bSeed[i] = Math.random() * 100;
+
+    bVel[i3] = 0; bVel[i3+1] = 0; bVel[i3+2] = 0;
+  }
+}
+initBurstParticles();
+
+const burstGeo = new THREE.BufferGeometry();
+const burstPosAttr = new THREE.BufferAttribute(bPos, 3);
+burstPosAttr.setUsage(THREE.DynamicDrawUsage);
+burstGeo.setAttribute('position', burstPosAttr);
+burstGeo.setAttribute('aColor', new THREE.BufferAttribute(bCol, 3));
+burstGeo.setAttribute('aSize',  new THREE.BufferAttribute(bSize, 1));
+burstGeo.setAttribute('aSeed',  new THREE.BufferAttribute(bSeed, 1));
+
+const burstMat = new THREE.ShaderMaterial({
+  uniforms: {
+    u_time:       { value: 0 },
+    u_pixelRatio: { value: Math.min(devicePixelRatio, 2) },
+    u_opacity:    { value: 1.0 }
+  },
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader:   PARTICLE_VERT,
+  fragmentShader: PARTICLE_FRAG
+});
+
+const burstPoints = new THREE.Points(burstGeo, burstMat);
+burstPoints.frustumCulled = false;
+burstPoints.visible = false;
+scene.add(burstPoints);
+
+/* ============================================================
+   ИСКРЫ, РАЗЛЕТАЮЩИЕСЯ ОТ СФЕР ПРИ ИХ ПОЯВЛЕНИИ
+   ============================================================ */
+const SPARK_N = 1200;
+const sparkPos  = new Float32Array(SPARK_N * 3);
+const sparkCol  = new Float32Array(SPARK_N * 3);
+const sparkSize = new Float32Array(SPARK_N);
+const sparkSeed = new Float32Array(SPARK_N);
+const sparkVel  = new Float32Array(SPARK_N * 3);
+
+const sparkGeo = new THREE.BufferGeometry();
+const sparkPosAttr = new THREE.BufferAttribute(sparkPos, 3);
+sparkPosAttr.setUsage(THREE.DynamicDrawUsage);
+sparkGeo.setAttribute('position', sparkPosAttr);
+sparkGeo.setAttribute('aColor', new THREE.BufferAttribute(sparkCol, 3));
+sparkGeo.setAttribute('aSize',  new THREE.BufferAttribute(sparkSize, 1));
+sparkGeo.setAttribute('aSeed',  new THREE.BufferAttribute(sparkSeed, 1));
+
+const sparkMat = new THREE.ShaderMaterial({
+  uniforms: {
+    u_time:       { value: 0 },
+    u_pixelRatio: { value: Math.min(devicePixelRatio, 2) },
+    u_opacity:    { value: 0.0 }
+  },
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader:   PARTICLE_VERT,
+  fragmentShader: PARTICLE_FRAG
+});
+
+const sparkPoints = new THREE.Points(sparkGeo, sparkMat);
+sparkPoints.frustumCulled = false;
+sparkPoints.visible = false;
+system.add(sparkPoints); // внутри system — наследует вращение сфер
+
+let sparkActive = false;
+let sparkT = 0;
+const SPARK_DURATION = 2.4;
+
+function spawnSparks(){
+  const c = new THREE.Color();
+  for (let i = 0; i < SPARK_N; i++){
+    const i3 = i*3;
+    const si = i % 3;
+    const a = (si / 3) * Math.PI * 2;
+    const hx = Math.cos(a) * ORBIT_R;
+    const hz = Math.sin(a) * ORBIT_R;
+
+    /* стартовая точка — на поверхности сферы */
+    const u = Math.random() * 2 - 1;
+    const th = Math.random() * Math.PI * 2;
+    const s = Math.sqrt(1 - u*u);
+    const r = SPH_R * (0.85 + Math.random() * 0.25);
+    const ox = s * Math.cos(th) * r;
+    const oy = u * r;
+    const oz = s * Math.sin(th) * r;
+
+    sparkPos[i3]   = hx + ox;
+    sparkPos[i3+1] = oy;
+    sparkPos[i3+2] = hz + oz;
+
+    /* скорость: наружу от центра сферы + разброс */
+    const nx = ox / r, ny = oy / r, nz = oz / r;
+    const speed = 18 + Math.random() * 55;
+    sparkVel[i3]   = (nx + (Math.random()-0.5)*0.7) * speed;
+    sparkVel[i3+1] = (ny + (Math.random()-0.5)*0.7) * speed;
+    sparkVel[i3+2] = (nz + (Math.random()-0.5)*0.7) * speed;
+
+    /* ~15% искр — «яркие беглецы»: очень яркие и быстрые, улетают далеко */
+    if (Math.random() < 0.15){
+      const boost = 3.0 + Math.random() * 2.5;
+      sparkVel[i3]   *= boost;
+      sparkVel[i3+1] *= boost;
+      sparkVel[i3+2] *= boost;
+      sparkSize[i] = 4.5 + Math.random() * 5.5;
+      sparkCol[i3]   = 1.0;
+      sparkCol[i3+1] = 0.96 + Math.random()*0.04;
+      sparkCol[i3+2] = 0.78 + Math.random()*0.22;
+    } else {
+      sparkSize[i] = 1.2 + Math.random() * 2.2;
+      c.setHSL(0.5 + Math.random()*0.15, 0.8, 0.65 + Math.random()*0.25);
+      sparkCol[i3]   = c.r;
+      sparkCol[i3+1] = c.g;
+      sparkCol[i3+2] = c.b;
+    }
+    sparkSeed[i] = Math.random() * 100;
+  }
+  sparkGeo.attributes.position.needsUpdate = true;
+  sparkGeo.attributes.aColor.needsUpdate = true;
+  sparkGeo.attributes.aSize.needsUpdate = true;
+  sparkGeo.attributes.aSeed.needsUpdate = true;
+
+  sparkActive = true;
+  sparkT = 0;
+  sparkMat.uniforms.u_opacity.value = 1.0;
+  sparkPoints.visible = true;
+}
+
+function updateSparks(dt, t){
+  if (!sparkActive) return;
+  sparkT += dt;
+  const p = sparkT / SPARK_DURATION;
+  if (p >= 1){
+    sparkActive = false;
+    sparkPoints.visible = false;
+    return;
+  }
+  const pos = sparkPosAttr.array;
+  const drag = Math.pow(0.55, dt);
+  for (let i = 0; i < SPARK_N; i++){
+    const i3 = i*3;
+    pos[i3]   += sparkVel[i3]   * dt;
+    pos[i3+1] += sparkVel[i3+1] * dt;
+    pos[i3+2] += sparkVel[i3+2] * dt;
+    sparkVel[i3]   *= drag;
+    sparkVel[i3+1] *= drag;
+    sparkVel[i3+2] *= drag;
+  }
+  sparkPosAttr.needsUpdate = true;
+
+  /* общий фейд: держим ярко первые 50%, затем гаснут */
+  const fade = 1 - Math.max(0, (p - 0.45) * 1.82);
+  sparkMat.uniforms.u_opacity.value = Math.max(0, fade);
+  sparkMat.uniforms.u_time.value = t;
+}
+
+/* ============================================================
+   СОСТОЯНИЕ
+   ============================================================ */
+let mode = 'idle';
+let systemRotationY = 0;
+let animTime = 0;
+let idleBlend = 1;   // плавное «пробуждение» сфер после возврата
+
+const merge = {
+  active: false,
+  phase: 'idle',
+  t: 0,
+  expandDuration: 0.85,
+  collapseDuration: 1.25,
+  flashActive: false,
+  flashT: 0,
+  flashDuration: 1.0,
+  fromPositions: [null, null, null]
+};
+
+const pulsing = { t: 0 };
+const burstState = { t: 0, clusterT: 0, retT: 0, dispT: 0 };
+
+/* ============================================================
+   ТАП
+   ============================================================ */
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const _wp = new THREE.Vector3();
+const _sphere = new THREE.Sphere();
+const _hit = new THREE.Vector3();
+
+function setNDC(clientX, clientY){
+  const rect = el.getBoundingClientRect();
+  ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+}
+
+function handleTap(clientX, clientY){
+  if (mode === 'pulsing'){
+    setNDC(clientX, clientY);
+    _sphere.set(new THREE.Vector3(0,0,0), 5);
+    if (raycaster.ray.intersectSphere(_sphere, _hit)) startBurst();
+    return;
+  }
+
+  if (mode !== 'idle') return;
+
+  setNDC(clientX, clientY);
+  let bestState = null, bestDist = Infinity;
+  for (let i = 0; i < spheres.length; i++){
+    const st = spheres[i];
+    if (st.exploding) continue;
+    st.holder.getWorldPosition(_wp);
+    const r = SPH_R * st.pts.scale.x * 1.05;
+    _sphere.set(_wp, r);
+    const hit = raycaster.ray.intersectSphere(_sphere, new THREE.Vector3());
+    if (hit){
+      const d = camera.position.distanceTo(_wp);
+      if (d < bestDist){ bestDist = d; bestState = st; }
+    }
+  }
+  if (bestState) registerTap(bestState);
+}
+
+function registerTap(st){
+  const now = performance.now();
+  if (now - st.lastTapTime > 1200) st.tapCount = 0;
+  st.tapCount++;
+  st.lastTapTime = now;
+  st.flashPulse = 1.0;
+  if (st.tapCount >= 3){
+    st.tapCount = 0;
+    triggerExplosion(st);
+  }
+}
+
+/* ============================================================
+   ВЗРЫВ ОДНОЙ СФЕРЫ
+   ============================================================ */
+function triggerExplosion(st){
+  if (st.exploding) return;
+  const posAttr = st.pts.geometry.attributes.position;
+  const base = posAttr.array;
+  const n = base.length;
+  st.origPositions = new Float32Array(n);
+  const dirs = new Float32Array(n);
+
+  for (let i = 0; i < n; i += 3){
+    st.origPositions[i]   = base[i];
+    st.origPositions[i+1] = base[i+1];
+    st.origPositions[i+2] = base[i+2];
+    const x = base[i], y = base[i+1], z = base[i+2];
+    const len = Math.sqrt(x*x + y*y + z*z) || 1;
+    const noise = 0.75 + Math.random() * 0.9;
+    dirs[i]   = (x/len) * noise;
+    dirs[i+1] = (y/len) * noise;
+    dirs[i+2] = (z/len) * noise;
+  }
+  st.explodeDirs = dirs;
+  st.exploding = true;
+  st.explodeT = 0;
+  st.burst.intensity = 25;
+}
+
+const EXPLODE_DURATION = 2.2;
+const EXPLODE_MAX_DISP = 14;
+
+function updateExplosion(st, dt){
+  if (!st.exploding) return;
+  st.explodeT += dt;
+  const p = Math.min(1, st.explodeT / EXPLODE_DURATION);
+
+  let disp;
+  if (p < 0.22){ const k = p / 0.22; disp = k * k; }
+  else         { const k = (p - 0.22) / 0.78; disp = 1 - k * k; }
+  disp *= EXPLODE_MAX_DISP;
+
+  const posAttr = st.pts.geometry.attributes.position;
+  const pos = posAttr.array;
+  const base = st.origPositions;
+  const dirs = st.explodeDirs;
+  for (let i = 0; i < pos.length; i++) pos[i] = base[i] + dirs[i] * disp;
+  posAttr.needsUpdate = true;
+
+  const growPulse = 1 + Math.sin(p * Math.PI) * 0.9;
+  const jitter    = 1 + Math.sin(p * Math.PI * 8) * 0.08 * (1-p);
+  st.pts.scale.setScalar(growPulse * jitter);
+
+  st.core.material.opacity = 0.30 + Math.sin(p * Math.PI) * 0.85;
+  st.core.scale.setScalar(SPH_R * 2.4 * (1 + Math.sin(p * Math.PI) * 1.6));
+  st.burst.intensity = 25 * Math.max(0, 1 - p * 1.6);
+
+  if (p >= 1){
+    st.exploding = false;
+    st.pts.scale.setScalar(1);
+    st.core.scale.setScalar(SPH_R * 2.4);
+    st.core.material.opacity = 0.30;
+    st.burst.intensity = 0;
+    for (let i = 0; i < pos.length; i++) pos[i] = base[i];
+    posAttr.needsUpdate = true;
+    st.origPositions = null;
+    st.explodeDirs = null;
+  }
+}
+
+/* ============================================================
+   СЛИЯНИЕ
+   ============================================================ */
+const MERGE_EXPAND_DISP  = 22;
+const MERGE_EXPAND_SCALE = 2.6;
+
+function startMerge(){
+  merge.active = true;
+  merge.phase = 'expand';
+  merge.t = 0;
+  merge.flashActive = false;
+  merge.flashT = 0;
+  mode = 'merging';
+
+  for (let i = 0; i < spheres.length; i++){
+    const s = spheres[i];
+    merge.fromPositions[i] = s.holder.position.clone();
+
+    const posAttr = s.pts.geometry.attributes.position;
+    const base = posAttr.array;
+    const n = base.length;
+    s.origPositions = new Float32Array(n);
+    const dirs = new Float32Array(n);
+
+    for (let j = 0; j < n; j += 3){
+      s.origPositions[j]   = base[j];
+      s.origPositions[j+1] = base[j+1];
+      s.origPositions[j+2] = base[j+2];
+
+      const x = base[j], y = base[j+1], z = base[j+2];
+      const len = Math.sqrt(x*x + y*y + z*z) || 1;
+      const noise = 0.85 + Math.random() * 0.6;
+      dirs[j]   = (x/len) * noise;
+      dirs[j+1] = (y/len) * noise;
+      dirs[j+2] = (z/len) * noise;
+    }
+    s.explodeDirs = dirs;
+    s._mergeStartScale = s.pts.scale.x;
+    s._mergeStartCore  = s.core.scale.x;
+    s._mergeStartOpacity = s.core.material.opacity;
+  }
+}
+
+function updateMerge(dt){
+  if (!merge.active) return;
+  merge.t += dt;
+
+  if (merge.phase === 'expand'){
+    const p = Math.min(1, merge.t / merge.expandDuration);
+    const e = 1 - Math.pow(1 - p, 3);
+
+    for (let i = 0; i < spheres.length; i++){
+      const s = spheres[i];
+      const from = merge.fromPositions[i];
+      const outK = e * 0.35;
+      const r = Math.sqrt(from.x*from.x + from.z*from.z) || 1;
+      s.holder.position.x = from.x + (from.x/r) * outK * 4;
+      s.holder.position.z = from.z + (from.z/r) * outK * 4;
+      s.holder.position.y = from.y + Math.sin(merge.t * 4 + i) * 0.5 * e;
+
+      const posAttr = s.pts.geometry.attributes.position;
+      const pos = posAttr.array;
+      const base = s.origPositions;
+      const dirs = s.explodeDirs;
+      const disp = e * MERGE_EXPAND_DISP;
+      for (let j = 0; j < pos.length; j++) pos[j] = base[j] + dirs[j] * disp;
+      posAttr.needsUpdate = true;
+
+      const sc = s._mergeStartScale + (MERGE_EXPAND_SCALE - s._mergeStartScale) * e;
+      s.pts.scale.setScalar(sc);
+      s.core.scale.setScalar(SPH_R * 2.4 * (sc / 1.9) * 1.6);
+      s.core.material.opacity = Math.min(1, s._mergeStartOpacity + e * 0.6);
+      s.burst.intensity = 25 + e * 40;
+      s.pts.rotation.z += dt * 2.0;
+    }
+
+    if (p >= 1){
+      merge.phase = 'collapse';
+      merge.t = 0;
+      for (let i = 0; i < spheres.length; i++){
+        const s = spheres[i];
+        merge.fromPositions[i] = s.holder.position.clone();
+        const posAttr = s.pts.geometry.attributes.position;
+        s.origPositions = new Float32Array(posAttr.array);
+        s._mergeStartScale = s.pts.scale.x;
+        s._mergeStartCore  = s.core.scale.x;
+        s._mergeStartOpacity = s.core.material.opacity;
+      }
+    }
+    return;
+  }
+
+  if (merge.phase === 'collapse'){
+    const p = Math.min(1, merge.t / merge.collapseDuration);
+    const e = p * p * p;
+
+    for (let i = 0; i < spheres.length; i++){
+      const s = spheres[i];
+      const from = merge.fromPositions[i];
+      s.holder.position.x = from.x * (1 - e);
+      s.holder.position.y = from.y * (1 - e);
+      s.holder.position.z = from.z * (1 - e);
+
+      const posAttr = s.pts.geometry.attributes.position;
+      const pos = posAttr.array;
+      const base = s.origPositions;
+      const shrink = 1 - e;
+      for (let j = 0; j < pos.length; j++) pos[j] = base[j] * shrink;
+      posAttr.needsUpdate = true;
+
+      const sc = s._mergeStartScale * (1 - e * 0.98);
+      s.pts.scale.setScalar(sc);
+
+      const coreBoost = Math.sin(p * Math.PI) * 0.7;
+      s.core.scale.setScalar(s._mergeStartCore * (1 - e * 0.95) + coreBoost * 4);
+      s.core.material.opacity = Math.min(1, s._mergeStartOpacity + coreBoost);
+      s.burst.intensity = 65 * (1 - e * 0.6) + Math.sin(p * Math.PI) * 60;
+
+      s.pts.rotation.y += dt * (3 + p * 12);
+      s.pts.rotation.x += dt * (2 + p * 8);
+    }
+
+    if (p >= 1){
+      merge.active = false;
+      merge.phase = 'idle';
+      merge.flashActive = true;
+      merge.flashT = 0;
+      mergeFlash.visible = true;
+      mergeFlash.scale.setScalar(0.1);
+      mergeFlash.material.opacity = 1;
+      mergeLight.intensity = 120;
+    }
+    return;
+  }
+}
+
+function updateMergeFlash(dt){
+  if (!merge.flashActive) return;
+  merge.flashT += dt;
+  const p = Math.min(1, merge.flashT / merge.flashDuration);
+  const e = 1 - Math.pow(1 - p, 3);
+
+  mergeFlash.scale.setScalar(0.1 + e * 110);
+  mergeFlash.material.opacity = 1 - e;
+  mergeLight.intensity = 120 * (1 - e);
+
+  if (p >= 1){
+    merge.flashActive = false;
+    mergeFlash.visible = false;
+    mergeFlash.material.opacity = 0;
+    mergeLight.intensity = 0;
+    enterPulsingMode();
+  }
+}
+
+/* ============================================================
+   РЕЖИМ ПУЛЬСИРУЮЩЕЙ ТОЧКИ
+   ============================================================ */
+function enterPulsingMode(){
+  mode = 'pulsing';
+  pulsing.t = 0;
+
+  resetSpheresToHome();
+  system.visible = false;
+
+  coreSprite.visible = true;
+  coreSprite2.visible = true;
+  coreLight.visible = true;
+  coreLight.intensity = 0;
+
+  coreSprite.material.opacity = 1;
+  coreSprite.scale.setScalar(0.5);
+  coreSprite2.material.opacity = 1;
+  coreSprite2.scale.setScalar(0.3);
+}
+
+function updatePulsingCore(dt, t){
+  pulsing.t += dt;
+
+  const pulse = 0.75 + 0.25 * Math.sin(t * 3.5);
+  const spark = 0.5 + 0.5 * Math.sin(t * 8.0);
+
+  coreSprite.scale.setScalar(4.0 * pulse + spark * 1.5);
+  coreSprite.material.opacity = 0.55 + 0.35 * pulse;
+
+  const hue = (t * 0.15) % 1;
+  const cc = new THREE.Color().setHSL(hue, 0.9, 0.65);
+  coreSprite2.material.color.copy(cc);
+  coreSprite2.scale.setScalar(2.0 * pulse);
+  coreSprite2.material.opacity = 0.85;
+
+  coreLight.color.copy(cc);
+  coreLight.intensity = 4 + 3 * pulse + spark * 2;
+}
+
+/* ============================================================
+   ЗАПУСК ВЗРЫВА ИСКР
+   ============================================================ */
+function startBurst(){
+  mode = 'bursting';
+  burstState.t = 0;
+  burstState.clusterT = 0;
+  burstState.retT = 0;
+  burstState.dispT = 0;
+
+  coreSprite.visible = false;
+  coreSprite2.visible = false;
+  coreLight.intensity = 0;
+  coreLight.visible = false;
+
+  for (let i = 0; i < BURST_N; i++){
+    const i3 = i*3;
+    bPos[i3] = 0; bPos[i3+1] = 0; bPos[i3+2] = 0;
+
+    const u = Math.random() * 2 - 1;
+    const th = Math.random() * Math.PI * 2;
+    const s = Math.sqrt(1 - u*u);
+    const speed = 28 + Math.random() * 45;
+    bVel[i3]   = s * Math.cos(th) * speed;
+    bVel[i3+1] = u * speed;
+    bVel[i3+2] = s * Math.sin(th) * speed;
+  }
+  burstPosAttr.needsUpdate = true;
+
+  burstMat.uniforms.u_opacity.value = 1.0;
+  burstPoints.visible = true;
+}
+
+const BURST_DUR = 1.0;
+const MORPH_DUR = 2.0;
+
+function clusterCenter(ci, t, out){
+  const c = clusters[ci];
+  const a = c.baseAngle + t * c.orbitSpeed;
+  out.x = Math.cos(a) * c.orbitR;
+  out.z = Math.sin(a) * c.orbitR;
+  out.y = Math.sin(t * c.ySpeed + c.yPhase) * c.yAmp;
+}
+
+const _cc = { x:0, y:0, z:0 };
+
+function updateBurstParticles(dt, t, blending){
+  const pos = burstPosAttr.array;
+
+  if (blending < 0.001){
+    const drag = Math.pow(0.20, dt);
+    for (let i = 0; i < BURST_N; i++){
+      const i3 = i*3;
+      pos[i3]   += bVel[i3]   * dt;
+      pos[i3+1] += bVel[i3+1] * dt;
+      pos[i3+2] += bVel[i3+2] * dt;
+      bVel[i3]   *= drag;
+      bVel[i3+1] *= drag;
+      bVel[i3+2] *= drag;
+    }
+  } else {
+    for (let i = 0; i < BURST_N; i++){
+      const i3 = i*3;
+      const ci = bCluster[i];
+      const c = clusters[ci];
+
+      clusterCenter(ci, t, _cc);
+
+      const la = bLocalAngle[i] + t * c.spinSpeed * bLocalSpin[i];
+      const tx = _cc.x + Math.cos(la) * bLocalR[i];
+      const ty = _cc.y + bLocalY[i];
+      const tz = _cc.z + Math.sin(la) * bLocalR[i];
+
+      const k = 1 - Math.exp(-4.5 * blending * dt);
+      pos[i3]   += (tx - pos[i3])   * k;
+      pos[i3+1] += (ty - pos[i3+1]) * k;
+      pos[i3+2] += (tz - pos[i3+2]) * k;
+    }
+  }
+  burstPosAttr.needsUpdate = true;
+}
+
+function updateBurst(dt, t){
+  burstState.t += dt;
+  const bt = burstState.t;
+
+  if (bt < BURST_DUR){
+    updateBurstParticles(dt, t, 0);
+  } else {
+    const k = Math.min(1, (bt - BURST_DUR) / MORPH_DUR);
+    const ease = k*k*(3-2*k);
+    updateBurstParticles(dt, t, ease);
+    if (k >= 1){
+      mode = 'clusters';
+      burstState.clusterT = 0;
+    }
+  }
+
+  burstMat.uniforms.u_time.value = t;
+}
+
+/* ============================================================
+   СГУСТКИ НЕДОЛГО КРУЖАТ — И РАЗЛЕТАЮТСЯ НА ПЛАНЕТЫ
+   ============================================================ */
+const CLUSTER_LIFE = 4.0;
+
+function updateClusters(dt, t){
+  burstState.clusterT += dt;
+  updateBurstParticles(dt, t, 1);
+  burstMat.uniforms.u_time.value = t;
+
+  if (burstState.clusterT > CLUSTER_LIFE){
+    mode = 'dispersing';
+    burstState.dispT = 0;
+  }
+}
+
+const DISPERSE_FLY  = 3.2;
+const DISPERSE_HOLD = 5.0;
+
+const _planetPos = planets.map(() => new THREE.Vector3());
+const _cc2 = { x:0, y:0, z:0 };
+
+function updateDispersing(dt, t){
+  burstState.dispT += dt;
+  const dT = burstState.dispT;
+  burstMat.uniforms.u_time.value = t;
+
+  for (let pi = 0; pi < planets.length; pi++){
+    planets[pi].mesh.getWorldPosition(_planetPos[pi]);
+  }
+
+  const pos = burstPosAttr.array;
+  const eGlobal = Math.min(1, dT / DISPERSE_FLY);
+
+  for (let i = 0; i < BURST_N; i++){
+    const i3 = i*3;
+
+    const ci = bCluster[i];
+    const c  = clusters[ci];
+    clusterCenter(ci, t, _cc2);
+    const la = bLocalAngle[i] + t * c.spinSpeed * bLocalSpin[i];
+    const cx = _cc2.x + Math.cos(la) * bLocalR[i];
+    const cy = _cc2.y + bLocalY[i];
+    const cz = _cc2.z + Math.sin(la) * bLocalR[i];
+
+    const pi  = ci % planets.length;
+    const pw  = _planetPos[pi];
+    const plR = planets[pi].radius;
+    const pa  = bFlyA[i] + t * bFlySpin[i];
+    const pr  = bFlyR[i] * plR;
+    const px  = pw.x + Math.cos(pa) * pr;
+    const py  = pw.y + bFlyY[i] * plR;
+    const pz  = pw.z + Math.sin(pa) * pr;
+
+    const local = (dT - bFlyDelay[i]) / Math.max(0.001, DISPERSE_FLY - bFlyDelay[i]);
+    const k = Math.max(0, Math.min(1, local));
+    const e = k*k*(3 - 2*k);
+
+    const tx = cx + (px - cx) * e;
+    const ty = cy + (py - cy) * e;
+    const tz = cz + (pz - cz) * e;
+
+    const rate = 2.5 + e * e * 9.0;
+    const kk = 1 - Math.exp(-rate * dt);
+
+    pos[i3]   += (tx - pos[i3])   * kk;
+    pos[i3+1] += (ty - pos[i3+1]) * kk;
+    pos[i3+2] += (tz - pos[i3+2]) * kk;
+  }
+  burstPosAttr.needsUpdate = true;
+
+  for (let pi = 0; pi < planets.length; pi++){
+    planets[pi].flash = Math.sin(eGlobal * Math.PI) * 2.2;
+  }
+
+  if (dT > DISPERSE_FLY + DISPERSE_HOLD){
+    for (let pi = 0; pi < planets.length; pi++) planets[pi].flash = 0;
+
+    mode = 'returning';
+    burstState.retT = 0;
+    resetSpheresToHome();
+    system.visible = true;
+    system.rotation.y = systemRotationY;
+    for (let i = 0; i < spheres.length; i++){
+      spheres[i].pts.scale.setScalar(0.001);
+      spheres[i].core.scale.setScalar(SPH_R * 2.4);
+      spheres[i].core.material.opacity = 0;
+    }
+    /* ✨ искры от сфер в момент их появления */
+    spawnSparks();
+  }
+}
+
+function updateReturning(dt, t){
+  burstState.retT += dt;
+  const k = Math.min(1, burstState.retT / 2.0);
+  const ease = k*k*(3-2*k);
+
+  burstMat.uniforms.u_opacity.value = 1 - ease;
+  burstMat.uniforms.u_time.value = t;
+
+  const sc = ease;
+  for (let i = 0; i < spheres.length; i++){
+    const s = spheres[i];
+    s.pts.scale.setScalar(sc);
+    s.core.scale.setScalar(SPH_R * 2.4 * sc);
+    s.core.material.opacity = 0.30 * sc;
+  }
+
+  if (k >= 1){
+    burstPoints.visible = false;
+    burstMat.uniforms.u_opacity.value = 1.0;
+
+    resetSpheresToHome();
+
+    for (let i = 0; i < spheres.length; i++){
+      spheres[i].pts.scale.setScalar(1);
+      spheres[i].core.scale.setScalar(SPH_R * 2.4);
+      spheres[i].core.material.opacity = 0.30;
+    }
+
+    /* Ключевое: обнуляем анимационное время и включаем плавное «пробуждение»,
+       чтобы сферы не дёрнулись в момент перехода в idle */
+    animTime = 0;
+    idleBlend = 0;
+    system.rotation.y = systemRotationY;
+
+    mode = 'idle';
+  }
+}
+
+/* ============================================================
+   СБРОС СФЕР НА ДОМАШНИЕ ПОЗИЦИИ
+   ============================================================ */
+function resetSpheresToHome(){
+  for (let i = 0; i < spheres.length; i++){
+    const s = spheres[i];
+    const a = s.homeAngle;
+    s.holder.position.set(Math.cos(a)*ORBIT_R, 0, Math.sin(a)*ORBIT_R);
+    s.holder.position.y = 0;
+
+    s.pts.scale.setScalar(1);
+    s.pts.rotation.set(0, 0, 0);
+    s.core.scale.setScalar(SPH_R * 2.4);
+    s.core.material.opacity = 0.30;
+    s.burst.intensity = 0;
+
+    const posAttr = s.pts.geometry.attributes.position;
+    posAttr.array.set(s.initialPositions);
+    posAttr.needsUpdate = true;
+
+    s.exploding = false;
+    s.explodeT = 0;
+    s.tapCount = 0;
+    s.flashPulse = 0;
+    s.origPositions = null;
+    s.explodeDirs = null;
+  }
+}
+
+/* ============================================================
+   ПРОВЕРКА СЛИЯНИЯ
+   ============================================================ */
+function checkMergeTrigger(){
+  if (mode !== 'idle') return;
+  let allExploding = true;
+  for (let i = 0; i < spheres.length; i++){
+    if (!spheres[i].exploding){ allExploding = false; break; }
+  }
+  if (allExploding) startMerge();
+}
+
+/* ============================================================
+   ЦИКЛ
+   ============================================================ */
+const clock = new THREE.Clock();
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t  = clock.getElapsedTime();
+
+  if (autoRotate) tTheta += 0.10 * dt;
+
+  camTheta += (tTheta - camTheta) * 0.12;
+  camPhi   += (tPhi   - camPhi  ) * 0.12;
+  camDist  += (tDist  - camDist ) * 0.12;
+
+  const stc = Math.sin(camPhi), ctc = Math.cos(camPhi);
+  camera.position.set(
+    camDist * stc * Math.sin(camTheta),
+    camDist * ctc,
+    camDist * stc * Math.cos(camTheta)
+  );
+  camera.lookAt(0, 0, 0);
+
+  /* --- логика по режимам --- */
+  if (mode === 'idle'){
+    animTime += dt;
+    /* плавное пробуждение: после возврата сферы «оживают» без рывка */
+    idleBlend = Math.min(1, idleBlend + dt * 1.4);
+    const blend = idleBlend * idleBlend * (3 - 2*idleBlend);
+
+    systemRotationY += dt * 0.30;
+    system.rotation.y = systemRotationY;
+
+    for (let i = 0; i < spheres.length; i++){
+      const s = spheres[i];
+      s.holder.position.y = Math.sin(animTime * s.bob + s.phase) * 2.6 * blend;
+      s.pts.rotation.y = animTime * s.sy * blend;
+      s.pts.rotation.x = animTime * s.sx * blend;
+      s.pts.rotation.z = animTime * 0.08 * blend;
+
+      if (s.flashPulse > 0){
+        s.flashPulse = Math.max(0, s.flashPulse - dt * 4.0);
+        const kk = 1 + Math.sin(s.flashPulse * Math.PI) * 0.18;
+        s.core.scale.setScalar(SPH_R * 2.4 * kk * (1 + s.flashPulse * 0.6));
+        s.core.material.opacity = 0.30 + s.flashPulse * 0.5;
+      } else if (!s.exploding){
+        s.core.material.opacity = 0.22 + 0.12 * Math.sin(animTime*1.6 + s.phase);
+      }
+      updateExplosion(s, dt);
+    }
+    checkMergeTrigger();
+  }
+  else if (mode === 'merging'){
+    systemRotationY += dt * 0.15;
+    system.rotation.y = systemRotationY;
+    updateMerge(dt);
+    updateMergeFlash(dt);
+  }
+  else if (mode === 'pulsing'){
+    updatePulsingCore(dt, t);
+  }
+  else if (mode === 'bursting'){
+    updateBurst(dt, t);
+  }
+  else if (mode === 'clusters'){
+    updateClusters(dt, t);
+  }
+  else if (mode === 'dispersing'){
+    updateDispersing(dt, t);
+  }
+  else if (mode === 'returning'){
+    updateReturning(dt, t);
+  }
+
+  /* искры от сфер — живут независимо от режима */
+  updateSparks(dt, t);
+
+  /* планеты */
+  for (let i = 0; i < planets.length; i++){
+    const p = planets[i];
+    p.spinG.rotation.y += p.speed * dt;
+    p.mesh.rotation.y  += p.self  * dt;
+    if (mode !== 'dispersing') p.flash *= Math.exp(-2.5 * dt);
+    p.mesh.material.emissiveIntensity = 1.0 + p.flash;
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+/* ============================================================
+   РЕСАЙЗ
+   ============================================================ */
+addEventListener('resize', function(){
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  const pr = Math.min(devicePixelRatio, 2);
+  renderer.setPixelRatio(pr);
+  renderer.setSize(innerWidth, innerHeight);
+  burstMat.uniforms.u_pixelRatio.value = pr;
+  sparkMat.uniforms.u_pixelRatio.value = pr;
+});
+</script>
+</body>
+</html>
