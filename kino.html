@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ночная парковка — Уличный кинотеатр</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: Arial, Helvetica, sans-serif; }
+        #info {
+            position: absolute; top: 20px; left: 20px; color: #fff; background: rgba(0,0,0,0.6);
+            padding: 10px 20px; border-radius: 8px; pointer-events: none; z-index: 100; font-size: 14px;
+        }
+        #playHint {
+            position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
+            color: #fff; background: rgba(0,0,0,0.7); padding: 12px 24px;
+            border-radius: 8px; z-index: 100; font-size: 16px;
+            cursor: pointer; transition: opacity 0.5s;
+        }
+        #playHint.hidden { opacity: 0; pointer-events: none; }
+        #status {
+            position: absolute; top: 20px; right: 20px; color: #8f8; background: rgba(0,0,0,0.6);
+            padding: 8px 16px; border-radius: 8px; z-index: 100; font-size: 12px;
+            font-family: monospace; max-width: 320px;
+        }
+        #sourceList {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 8px; z-index: 100; flex-wrap: wrap; justify-content: center;
+            max-width: 95vw;
+        }
+        .srcBtn {
+            background: rgba(0,0,0,0.7); color: #fff; border: 1px solid #555;
+            padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px;
+        }
+        .srcBtn.active { background: #2a7; border-color: #2a7; }
+        .srcBtn.ok { background: #175; border-color: #3a8; }
+        .srcBtn.fail { background: #611; border-color: #a33; }
+        .srcBtn:hover { background: #333; }
+        #streamVideo {
+            position: absolute; top: -9999px; left: -9999px;
+            width: 1px; height: 1px; opacity: 0.01; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">🎥 Ночная парковка — Уличный кинотеатр</div>
+    <div id="status">Источник: —</div>
+    <div id="playHint">▶ Нажмите в любом месте, чтобы запустить видео</div>
+    <div id="sourceList"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+
+    <video id="streamVideo" crossorigin="anonymous" playsinline muted loop preload="auto"></video>
+
+    <script>
+        // ============================================================
+        // 1. БАЗОВЫЕ НАСТРОЙКИ
+        // ============================================================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050510);
+        scene.fog = new THREE.Fog(0x050510, 30, 120);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(12, 6, 22);
+        camera.lookAt(0, 4, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 4, 0);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2.1;
+        controls.minDistance = 5;
+        controls.maxDistance = 50;
+
+        // ============================================================
+        // 2. ОСВЕЩЕНИЕ
+        // ============================================================
+        scene.add(new THREE.AmbientLight(0x404060, 0.8));
+
+        const moonLight = new THREE.DirectionalLight(0x8899bb, 0.5);
+        moonLight.position.set(-15, 25, -10);
+        moonLight.castShadow = true;
+        moonLight.shadow.mapSize.width = 1024;
+        moonLight.shadow.mapSize.height = 1024;
+        moonLight.shadow.camera.left = -30;
+        moonLight.shadow.camera.right = 30;
+        moonLight.shadow.camera.top = 30;
+        moonLight.shadow.camera.bottom = -30;
+        scene.add(moonLight);
+
+        const screenGlow = new THREE.PointLight(0xffaa55, 1.2, 40, 2);
+        screenGlow.position.set(0, 6, 5);
+        scene.add(screenGlow);
+
+        const spotLight = new THREE.SpotLight(0xffdd88, 1.5);
+        spotLight.position.set(8, 12, 10);
+        spotLight.target.position.set(0, 0, 0);
+        spotLight.angle = Math.PI / 5;
+        spotLight.penumbra = 0.5;
+        spotLight.castShadow = true;
+        scene.add(spotLight);
+        scene.add(spotLight.target);
+
+        // ============================================================
+        // 3. ЗЕМЛЯ
+        // ============================================================
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(80, 80),
+            new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.9, metalness: 0.1 })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        const lineMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.8 });
+        for (let i = -3; i <= 3; i++) {
+            const line = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.01, 12), lineMaterial);
+            line.position.set(i * 5, 0.01, 0);
+            line.receiveShadow = true;
+            scene.add(line);
+        }
+
+        // ============================================================
+        // 4. ЭКРАН И КАРКАС
+        // ============================================================
+        const screenWidth = 16;
+        const screenHeight = 9;
+
+        const screenBacking = new THREE.Mesh(
+            new THREE.PlaneGeometry(screenWidth, screenHeight),
+            new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x111111 })
+        );
+        screenBacking.position.set(0, 5.5, 1.1);
+        scene.add(screenBacking);
+
+        const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.8 });
+
+        const topBar = new THREE.Mesh(new THREE.BoxGeometry(screenWidth + 1, 0.4, 0.4), frameMaterial);
+        topBar.position.set(0, 5.5 + screenHeight / 2 + 0.2, 1.3);
+        topBar.castShadow = true; scene.add(topBar);
+
+        const bottomBar = new THREE.Mesh(new THREE.BoxGeometry(screenWidth + 1, 0.4, 0.4), frameMaterial);
+        bottomBar.position.set(0, 5.5 - screenHeight / 2 - 0.2, 1.3);
+        bottomBar.castShadow = true; scene.add(bottomBar);
+
+        const leftPost = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 8, 8), frameMaterial);
+        leftPost.position.set(-screenWidth / 2 - 0.7, 4, 1.3);
+        leftPost.castShadow = true; scene.add(leftPost);
+
+        const rightPost = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 8, 8), frameMaterial);
+        rightPost.position.set(screenWidth / 2 + 0.7, 4, 1.3);
+        rightPost.castShadow = true; scene.add(rightPost);
+
+        // ============================================================
+        // 5. ИНФОРМАЦИОННАЯ ПАНЕЛЬ
+        // ============================================================
+        const infoCanvas = document.createElement('canvas');
+        infoCanvas.width = 1280;
+        infoCanvas.height = 720;
+        const ictx = infoCanvas.getContext('2d');
+
+        const infoTexture = new THREE.CanvasTexture(infoCanvas);
+        infoTexture.minFilter = THREE.LinearFilter;
+        infoTexture.encoding = THREE.sRGBEncoding;
+
+        const uiState = {
+            title: 'УЛИЧНЫЙ КИНОТЕАТР',
+            statusLine: 'Инициализация…',
+            currentName: '—',
+            currentStatus: 'waiting',
+            sources: [],
+            log: [],
+            spinner: 0,
+            mode: 'info'
+        };
+
+        function pushLog(text) {
+            const time = new Date().toLocaleTimeString('ru-RU');
+            uiState.log.unshift(`[${time}] ${text}`);
+            if (uiState.log.length > 6) uiState.log.pop();
+        }
+
+        function statusColor(s) {
+            switch (s) {
+                case 'ready':   return '#4dff9a';
+                case 'playing': return '#4dff9a';
+                case 'loading': return '#ffd24d';
+                case 'failed':  return '#ff5b5b';
+                default:        return '#8fa0b5';
+            }
+        }
+
+        function statusLabel(s) {
+            switch (s) {
+                case 'ready':   return 'ГОТОВ';
+                case 'playing': return 'ИГРАЕТ';
+                case 'loading': return 'ЗАГРУЗКА…';
+                case 'failed':  return 'ОШИБКА';
+                default:        return 'ОЖИДАНИЕ';
+            }
+        }
+
+        function drawInfoPanel(t) {
+            const W = infoCanvas.width;
+            const H = infoCanvas.height;
+
+            const grad = ictx.createLinearGradient(0, 0, 0, H);
+            grad.addColorStop(0, '#0b1020');
+            grad.addColorStop(1, '#050810');
+            ictx.fillStyle = grad;
+            ictx.fillRect(0, 0, W, H);
+
+            ictx.fillStyle = 'rgba(255,255,255,0.02)';
+            for (let y = 0; y < H; y += 4) ictx.fillRect(0, y, W, 2);
+
+            ictx.strokeStyle = 'rgba(120,200,255,0.25)';
+            ictx.lineWidth = 4;
+            ictx.strokeRect(20, 20, W - 40, H - 40);
+
+            ictx.fillStyle = '#7ec8ff';
+            ictx.font = 'bold 46px Arial';
+            ictx.textAlign = 'center';
+            ictx.textBaseline = 'top';
+            ictx.fillText('🎬  ' + uiState.title, W / 2, 50);
+
+            ictx.strokeStyle = 'rgba(120,200,255,0.4)';
+            ictx.lineWidth = 2;
+            ictx.beginPath();
+            ictx.moveTo(60, 120);
+            ictx.lineTo(W - 60, 120);
+            ictx.stroke();
+
+            ictx.textAlign = 'left';
+            ictx.fillStyle = '#aab6c8';
+            ictx.font = '26px Arial';
+            ictx.fillText('ТЕКУЩИЙ ИСТОЧНИК:', 70, 145);
+
+            ictx.fillStyle = '#ffffff';
+            ictx.font = 'bold 40px Arial';
+            ictx.fillText(uiState.currentName, 70, 185);
+
+            const badgeColor = statusColor(uiState.currentStatus);
+            ictx.fillStyle = badgeColor + '30';
+            ictx.fillRect(W - 380, 175, 310, 55);
+            ictx.strokeStyle = badgeColor;
+            ictx.lineWidth = 3;
+            ictx.strokeRect(W - 380, 175, 310, 55);
+
+            ictx.fillStyle = badgeColor;
+            ictx.font = 'bold 30px Arial';
+            ictx.textAlign = 'center';
+            ictx.fillText(statusLabel(uiState.currentStatus), W - 225, 188);
+
+            if (uiState.currentStatus === 'loading') {
+                const cx = W - 420;
+                const cy = 202;
+                ictx.strokeStyle = badgeColor;
+                ictx.lineWidth = 6;
+                ictx.beginPath();
+                ictx.arc(cx, cy, 20, uiState.spinner, uiState.spinner + Math.PI * 1.4);
+                ictx.stroke();
+            }
+
+            ictx.textAlign = 'left';
+            ictx.fillStyle = '#d7e2f0';
+            ictx.font = '28px Arial';
+            ictx.fillText(uiState.statusLine, 70, 260);
+
+            ictx.strokeStyle = 'rgba(120,200,255,0.2)';
+            ictx.beginPath();
+            ictx.moveTo(60, 310);
+            ictx.lineTo(W - 60, 310);
+            ictx.stroke();
+
+            ictx.fillStyle = '#7ec8ff';
+            ictx.font = 'bold 24px Arial';
+            ictx.fillText('СПИСОК ИСТОЧНИКОВ:', 70, 330);
+
+            const cols = 2;
+            const colW = (W - 140) / cols;
+            const rowH = 46;
+            const startY = 370;
+
+            uiState.sources.forEach((s, i) => {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                const x = 70 + col * colW;
+                const y = startY + row * rowH;
+
+                const isCurrent = i === currentIndex;
+                const c = statusColor(s.status);
+
+                if (isCurrent) {
+                    ictx.fillStyle = 'rgba(120,200,255,0.10)';
+                    ictx.fillRect(x - 10, y - 6, colW - 20, rowH - 6);
+                }
+
+                ictx.beginPath();
+                ictx.fillStyle = c;
+                ictx.arc(x + 10, y + 14, 8, 0, Math.PI * 2);
+                ictx.fill();
+
+                ictx.fillStyle = isCurrent ? '#ffffff' : '#aab6c8';
+                ictx.font = (isCurrent ? 'bold ' : '') + '22px Arial';
+                ictx.fillText(s.name, x + 32, y + 2);
+
+                ictx.fillStyle = c;
+                ictx.font = '18px Arial';
+                ictx.textAlign = 'right';
+                ictx.fillText(statusLabel(s.status), x + colW - 30, y + 4);
+                ictx.textAlign = 'left';
+            });
+
+            const logTop = H - 200;
+            ictx.strokeStyle = 'rgba(120,200,255,0.2)';
+            ictx.beginPath();
+            ictx.moveTo(60, logTop - 15);
+            ictx.lineTo(W - 60, logTop - 15);
+            ictx.stroke();
+
+            ictx.fillStyle = '#7ec8ff';
+            ictx.font = 'bold 22px Arial';
+            ictx.fillText('ЖУРНАЛ СОБЫТИЙ:', 70, logTop - 5);
+
+            ictx.font = '20px monospace';
+            uiState.log.forEach((line, i) => {
+                ictx.fillStyle = i === 0 ? '#e6f3ff' : `rgba(200,220,240,${0.85 - i * 0.12})`;
+                ictx.fillText(line, 70, logTop + 25 + i * 26);
+            });
+
+            const barX = ((t * 220) % (W + 300)) - 150;
+            const barGrad = ictx.createLinearGradient(barX - 150, 0, barX + 150, 0);
+            barGrad.addColorStop(0, 'rgba(120,200,255,0)');
+            barGrad.addColorStop(0.5, 'rgba(120,200,255,0.10)');
+            barGrad.addColorStop(1, 'rgba(120,200,255,0)');
+            ictx.fillStyle = barGrad;
+            ictx.fillRect(0, 0, W, H);
+
+            ictx.fillStyle = 'rgba(200,220,240,0.7)';
+            ictx.font = '20px monospace';
+            ictx.textAlign = 'right';
+            ictx.fillText(new Date().toLocaleTimeString('ru-RU'), W - 60, H - 55);
+            ictx.textAlign = 'left';
+        }
+
+        // ============================================================
+        // 6. ВИДЕО ИСТОЧНИКИ — ПОЛНОСТЬЮ ЗАМЕНЕНЫ
+        // ============================================================
+        const videoElement = document.getElementById('streamVideo');
+        videoElement.muted = true;
+        videoElement.playsInline = true;
+        videoElement.loop = true;
+        videoElement.crossOrigin = 'anonymous';
+
+        const playHint = document.getElementById('playHint');
+        const statusEl = document.getElementById('status');
+        const sourceListEl = document.getElementById('sourceList');
+
+        // Все источники проверены: отдают Access-Control-Allow-Origin: *
+        const sources = [
+            // --- MP4 (CORS: Google Storage отдаёт Access-Control-Allow-Origin: *) ---
+            { type: 'mp4', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', name: 'Big Buck Bunny (MP4)' },
+            { type: 'mp4', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4', name: 'Elephants Dream (MP4)' },
+            { type: 'mp4', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4', name: 'Sintel (MP4)' },
+            { type: 'mp4', url: 'https://mdn.github.io/shared-assets/videos/flower.mp4', name: 'MDN Flower (MP4)' },
+            // --- HLS (CORS: Mux, Unified Streaming, Akamai, Apple — все отдают CORS) ---
+            { type: 'hls', url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8', name: 'Big Buck Bunny 4K (HLS)' },
+            { type: 'hls', url: 'https://test-streams.mux.dev/pts_shift/master.m3u8', name: 'Mux PTS Shift (HLS)' },
+            { type: 'hls', url: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8', name: 'Tears of Steel 4K (HLS)' },
+            { type: 'hls', url: 'https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8', name: 'Sintel Akamai (HLS)' },
+            { type: 'hls', url: 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', name: 'Apple Bipbop (HLS)' },
+            { type: 'hls', url: 'https://ireplay.tv/test/blender.m3u8', name: 'Blender Open Movies 24/7 (HLS)' }
+        ];
+
+        uiState.sources = sources.map(s => ({ name: s.name, status: 'waiting' }));
+
+        const videoTexture = new THREE.VideoTexture(videoElement);
+        videoTexture.minFilter = THREE.LinearFilter;
+        videoTexture.magFilter = THREE.LinearFilter;
+        videoTexture.format = THREE.RGBAFormat;
+        videoTexture.generateMipmaps = false;
+        videoTexture.encoding = THREE.sRGBEncoding;
+
+        const screenMaterial = new THREE.MeshBasicMaterial({
+            map: infoTexture,
+            side: THREE.FrontSide,
+            toneMapped: false
+        });
+
+        const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(screenWidth, screenHeight), screenMaterial);
+        screenMesh.position.set(0, 5.5, 1.05);
+        scene.add(screenMesh);
+
+        let currentHls = null;
+        let currentIndex = 0;
+        let sourceLoadTimeout = null;
+        let isLoaded = false;
+        let pendingHandlers = [];
+
+        function detachPendingHandlers() {
+            pendingHandlers.forEach(([ev, fn]) => videoElement.removeEventListener(ev, fn));
+            pendingHandlers = [];
+        }
+
+        function clearVideoElement() {
+            detachPendingHandlers();
+            if (currentHls) {
+                try { currentHls.destroy(); } catch (e) {}
+                currentHls = null;
+            }
+            videoElement.pause();
+            videoElement.removeAttribute('src');
+            try { videoElement.load(); } catch (e) {}
+        }
+
+        function updateActiveButton() {
+            const btns = sourceListEl.querySelectorAll('.srcBtn[data-index]');
+            btns.forEach(b => {
+                const i = Number(b.dataset.index);
+                b.classList.toggle('active', i === currentIndex);
+                b.classList.toggle('ok', uiState.sources[i] && uiState.sources[i].status === 'ready');
+                b.classList.toggle('fail', uiState.sources[i] && uiState.sources[i].status === 'failed');
+            });
+        }
+
+        function buildSourceButtons() {
+            sourceListEl.innerHTML = '';
+            sources.forEach((src, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'srcBtn' + (i === currentIndex ? ' active' : '');
+                btn.dataset.index = i;
+                btn.textContent = src.name;
+                btn.addEventListener('click', () => {
+                    if (i === currentIndex && isLoaded) return;
+                    loadSource(i);
+                });
+                sourceListEl.appendChild(btn);
+            });
+
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'srcBtn';
+            nextBtn.textContent = '⏭ Далее';
+            nextBtn.addEventListener('click', () => loadSource(currentIndex + 1));
+            sourceListEl.appendChild(nextBtn);
+        }
+
+        function markSource(index, status) {
+            if (uiState.sources[index]) {
+                uiState.sources[index].status = status;
+            }
+            updateActiveButton();
+        }
+
+        function switchScreenToVideo() {
+            uiState.mode = 'video';
+            screenMaterial.map = videoTexture;
+            screenMaterial.needsUpdate = true;
+        }
+
+        function switchScreenToInfo() {
+            uiState.mode = 'info';
+            screenMaterial.map = infoTexture;
+            screenMaterial.needsUpdate = true;
+        }
+
+        function loadSource(index) {
+            if (sourceLoadTimeout) {
+                clearTimeout(sourceLoadTimeout);
+                sourceLoadTimeout = null;
+            }
+
+            if (index >= sources.length) {
+                console.error('❌ Все источники недоступны.');
+                uiState.currentName = '—';
+                uiState.currentStatus = 'failed';
+                uiState.statusLine = 'Все источники недоступны. Смотрите список слева.';
+                pushLog('Все источники исчерпаны');
+                statusEl.textContent = 'Источник: нет доступных';
+                isLoaded = false;
+                clearVideoElement();
+                switchScreenToInfo();
+                updateActiveButton();
+                return;
+            }
+
+            isLoaded = false;
+            currentIndex = index;
+            clearVideoElement();
+            switchScreenToInfo();
+
+            const source = sources[index];
+            console.log(`\n[${index + 1}/${sources.length}] Загрузка: ${source.name}\n${source.url}`);
+
+            uiState.currentName = source.name;
+            uiState.currentStatus = 'loading';
+            uiState.statusLine = `Подключение к источнику #${index + 1} из ${sources.length}…`;
+            pushLog(`Начало загрузки: ${source.name}`);
+            statusEl.textContent = `Загрузка: ${source.name}…`;
+            markSource(index, 'loading');
+            updateActiveButton();
+
+            const onReady = () => {
+                if (isLoaded) return;
+                isLoaded = true;
+
+                if (sourceLoadTimeout) {
+                    clearTimeout(sourceLoadTimeout);
+                    sourceLoadTimeout = null;
+                }
+                detachPendingHandlers();
+
+                console.log(`✅ Готово: ${source.name}`);
+                uiState.currentStatus = 'ready';
+                uiState.statusLine = 'Источник готов, запускаю воспроизведение…';
+                pushLog(`Готово: ${source.name}`);
+                statusEl.textContent = `Источник: ${source.name}`;
+                markSource(index, 'ready');
+
+                switchScreenToVideo();
+
+                videoElement.play().then(() => {
+                    uiState.currentStatus = 'playing';
+                    uiState.statusLine = `Воспроизведение: ${source.name}`;
+                    pushLog(`Играет: ${source.name}`);
+                }).catch(err => {
+                    console.warn('Автовоспроизведение заблокировано:', err.name);
+                    uiState.statusLine = 'Нажмите для запуска воспроизведения';
+                    pushLog('Автозапуск заблокирован — нужен клик');
+                });
+            };
+
+            const onMeta = () => onReady();
+            const onCanPlay = () => onReady();
+            videoElement.addEventListener('loadedmetadata', onMeta);
+            videoElement.addEventListener('canplay', onCanPlay);
+            pendingHandlers.push(['loadedmetadata', onMeta], ['canplay', onCanPlay]);
+
+            sourceLoadTimeout = setTimeout(() => {
+                sourceLoadTimeout = null;
+                if (!isLoaded) {
+                    console.warn(`⏱ Таймаут: ${source.name}`);
+                    pushLog(`⏱ Таймаут: ${source.name}`);
+                    markSource(index, 'failed');
+                    loadSource(index + 1);
+                }
+            }, 20000);
+
+            if (source.type === 'mp4') {
+                videoElement.src = source.url;
+                videoElement.load();
+
+            } else if (source.type === 'hls') {
+                if (window.Hls && Hls.isSupported()) {
+                    const hls = new Hls({
+                        maxBufferLength: 12,
+                        manifestLoadingTimeOut: 15000,
+                        manifestLoadingMaxRetry: 1,
+                        levelLoadingTimeOut: 15000,
+                        levelLoadingMaxRetry: 1,
+                        fragLoadingTimeOut: 25000,
+                        fragLoadingMaxRetry: 1
+                    });
+                    currentHls = hls;
+
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        console.log('HLS: манифест разобран, ждём фрагменты…');
+                        uiState.statusLine = 'Манифест разобран, буферизация…';
+                        pushLog('HLS: манифест разобран');
+                    });
+
+                    hls.on(Hls.Events.FRAG_LOADED, onReady);
+
+                    hls.on(Hls.Events.ERROR, (event, data) => {
+                        console.warn(`HLS: ${data.type} / ${data.details} (fatal=${data.fatal})`);
+                        if (data.fatal && !isLoaded) {
+                            pushLog(`HLS ошибка: ${data.details}`);
+                            markSource(index, 'failed');
+                            loadSource(index + 1);
+                        }
+                    });
+
+                    hls.loadSource(source.url);
+                    hls.attachMedia(videoElement);
+
+                } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                    videoElement.src = source.url;
+                    videoElement.load();
+                } else {
+                    pushLog('HLS не поддерживается браузером');
+                    markSource(index, 'failed');
+                    loadSource(index + 1);
+                }
+            }
+        }
+
+        videoElement.addEventListener('error', () => {
+            if (!videoElement.currentSrc) return;
+            console.error('Ошибка <video>:', videoElement.error);
+            const src = sources[currentIndex];
+            if (!isLoaded && src && src.type === 'mp4') {
+                pushLog(`Ошибка видео: ${src.name}`);
+                markSource(currentIndex, 'failed');
+                loadSource(currentIndex + 1);
+            }
+        });
+
+        document.addEventListener('click', () => {
+            if (videoElement.paused && videoElement.readyState >= 2) {
+                videoElement.play()
+                    .then(() => {
+                        playHint.classList.add('hidden');
+                        uiState.currentStatus = 'playing';
+                        uiState.statusLine = `Воспроизведение: ${sources[currentIndex].name}`;
+                    })
+                    .catch(e => console.warn('Ошибка запуска:', e));
+            }
+        });
+
+        videoElement.addEventListener('playing', () => {
+            playHint.classList.add('hidden');
+            uiState.currentStatus = 'playing';
+            uiState.statusLine = `Воспроизведение: ${sources[currentIndex].name}`;
+            statusEl.textContent = `Источник: ${sources[currentIndex].name}`;
+        });
+
+        buildSourceButtons();
+        loadSource(0);
+
+        // ============================================================
+        // 7. МАШИНЫ
+        // ============================================================
+        function createCar(color, x, z, rotationY = 0) {
+            const carGroup = new THREE.Group();
+
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(1.8, 0.6, 4.2),
+                new THREE.MeshStandardMaterial({ color: color, roughness: 0.4, metalness: 0.6 })
+            );
+            body.position.y = 0.5; body.castShadow = true; body.receiveShadow = true;
+            carGroup.add(body);
+
+            const cabin = new THREE.Mesh(
+                new THREE.BoxGeometry(1.5, 0.5, 2.0),
+                new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.3 })
+            );
+            cabin.position.set(0, 1.0, -0.3); cabin.castShadow = true;
+            carGroup.add(cabin);
+
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+            const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.25, 12);
+            [[-0.9, 0.35, 1.4], [0.9, 0.35, 1.4], [-0.9, 0.35, -1.4], [0.9, 0.35, -1.4]].forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.position.set(pos[0], pos[1], pos[2]);
+                wheel.castShadow = true;
+                carGroup.add(wheel);
+            });
+
+            const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 0.8 });
+            const headlightGeo = new THREE.SphereGeometry(0.12, 8, 8);
+            const hl1 = new THREE.Mesh(headlightGeo, headlightMat);
+            hl1.position.set(-0.6, 0.55, 2.1); carGroup.add(hl1);
+            const hl2 = new THREE.Mesh(headlightGeo, headlightMat);
+            hl2.position.set(0.6, 0.55, 2.1); carGroup.add(hl2);
+
+            carGroup.position.set(x, 0, z);
+            carGroup.rotation.y = rotationY;
+            return carGroup;
+        }
+
+        const carColors = [0xaa2222, 0x2244aa, 0x22aa44, 0xcccccc, 0x8844aa, 0xcc6622];
+        const carPositions = [
+            { x: -8, z: 8, ry: 0.1 }, { x: -3, z: 9, ry: -0.05 },
+            { x: 3, z: 8.5, ry: 0.05 }, { x: 8, z: 9, ry: -0.1 },
+            { x: -9, z: 14, ry: 0.2 }, { x: 9, z: 13, ry: -0.15 }
+        ];
+
+        carPositions.forEach((pos, i) => {
+            scene.add(createCar(carColors[i % carColors.length], pos.x, pos.z, pos.ry));
+        });
+
+        // ============================================================
+        // 8. ФОНАРИ, ЗВЁЗДЫ, ЛУНА
+        // ============================================================
+        function createStreetLamp(x, z) {
+            const lampGroup = new THREE.Group();
+            const poleMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.5, metalness: 0.8 });
+
+            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 8, 8), poleMat);
+            pole.position.y = 4; pole.castShadow = true; lampGroup.add(pole);
+
+            const arm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 1.5), poleMat);
+            arm.position.set(0, 7.8, 0.7); lampGroup.add(arm);
+
+            const bulb = new THREE.Mesh(
+                new THREE.SphereGeometry(0.25, 8, 8),
+                new THREE.MeshStandardMaterial({ color: 0xffeedd, emissive: 0xffcc88, emissiveIntensity: 1.5 })
+            );
+            bulb.position.set(0, 7.8, 1.4); lampGroup.add(bulb);
+
+            const lampLight = new THREE.PointLight(0xffcc88, 0.8, 20, 2);
+            lampLight.position.set(0, 7.8, 1.4); lampGroup.add(lampLight);
+
+            lampGroup.position.set(x, 0, z);
+            return lampGroup;
+        }
+
+        scene.add(createStreetLamp(-14, 5));
+        scene.add(createStreetLamp(14, 5));
+        scene.add(createStreetLamp(-14, 18));
+        scene.add(createStreetLamp(14, 18));
+
+        const starGeometry = new THREE.BufferGeometry();
+        const starCount = 1500;
+        const starPositions = new Float32Array(starCount * 3);
+        for (let i = 0; i < starCount * 3; i += 3) {
+            starPositions[i] = (Math.random() - 0.5) * 400;
+            starPositions[i + 1] = Math.random() * 100 + 20;
+            starPositions[i + 2] = (Math.random() - 0.5) * 400;
+        }
+        starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+        scene.add(new THREE.Points(starGeometry, new THREE.PointsMaterial({
+            color: 0xffffff, size: 0.3, transparent: true, opacity: 0.8
+        })));
+
+        const moon = new THREE.Mesh(
+            new THREE.SphereGeometry(3, 16, 16),
+            new THREE.MeshBasicMaterial({ color: 0xeeddcc })
+        );
+        moon.position.set(-60, 50, -80);
+        scene.add(moon);
+
+        // ============================================================
+        // 9. АНИМАЦИЯ
+        // ============================================================
+        let clockTime = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            clockTime += 0.016;
+
+            if (!videoElement.paused &&
+                videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
+                videoTexture.needsUpdate = true;
+            }
+
+            if (uiState.mode === 'info') {
+                uiState.spinner += 0.12;
+                drawInfoPanel(clockTime);
+                infoTexture.needsUpdate = true;
+            }
+
+            screenGlow.intensity = 1.0 + Math.sin(Date.now() * 0.002) * 0.15;
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
