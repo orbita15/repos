@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e88e5"/>
+      <stop offset="0.55" stop-color="#64b5f6"/>
+      <stop offset="0.65" stop-color="#ffcc80"/>
+      <stop offset="1" stop-color="#ff8a65"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d47a1"/>
+      <stop offset="1" stop-color="#041c34"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#sky)"/>
+
+  <!-- Море -->
+  <path d="M0 330 Q 64 310 128 330 T 256 330 T 384 330 T 512 330 L 512 512 L 0 512 Z"
+        fill="url(#sea)" opacity="0.95"/>
+
+  <!-- Солнце -->
+  <circle cx="380" cy="180" r="42" fill="#fff8d6" opacity="0.9"/>
+  <circle cx="380" cy="180" r="70" fill="#fff8d6" opacity="0.15"/>
+
+  <!-- Катер -->
+  <g transform="translate(256 300)">
+    <!-- Корпус -->
+    <path d="M -140 20 L 140 20 L 110 60 Q 0 78 -110 60 Z" fill="#f4f6f8"/>
+    <path d="M -140 20 L 140 20 L 132 34 L -132 34 Z" fill="#c0392b"/>
+    <!-- Рубка -->
+    <rect x="-55" y="-40" width="110" height="60" rx="6" fill="#eef1f4"/>
+    <rect x="-48" y="-30" width="96" height="22" rx="3" fill="#16242f" opacity="0.85"/>
+    <!-- Мачта -->
+    <rect x="-2" y="-90" width="4" height="52" fill="#d6dbe0"/>
+    <circle cx="0" cy="-92" r="6" fill="#ffd166"/>
+  </g>
+
+  <!-- Брызги -->
+  <circle cx="140" cy="315" r="4" fill="#ffffff" opacity="0.7"/>
+  <circle cx="120" cy="308" r="3" fill="#ffffff" opacity="0.5"/>
+  <circle cx="370" cy="312" r="4" fill="#ffffff" opacity="0.7"/>
+</svg>
