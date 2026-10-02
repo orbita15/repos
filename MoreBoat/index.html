@@ -82,13 +82,12 @@
 <script src="three.min.js"></script>
 
 <script>
-/* ============================================================
-   ИГРА — базовая сцена, вода, катер, остров, джойстик, камера
-   (полный код из предыдущего ответа; здесь сохранён полностью)
-   ============================================================ */
 (function () {
 'use strict';
 
+/* ============================================================
+   БАЗА
+   ============================================================ */
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -102,14 +101,14 @@ const FOG_DENSITY = 0.0018;
 scene.fog = new THREE.FogExp2(FOG_COLOR.getHex(), FOG_DENSITY);
 const sunDir = new THREE.Vector3(0.45, 0.30, -0.84).normalize();
 
-// Свет
+/* ---------- СВЕТ ---------- */
 const sunLight = new THREE.DirectionalLight(0xfff2dd, 1.55);
 sunLight.position.copy(sunDir).multiplyScalar(120);
 scene.add(sunLight);
 scene.add(new THREE.HemisphereLight(0xbfd8f0, 0x14303e, 0.85));
 scene.add(new THREE.AmbientLight(0xffffff, 0.12));
 
-// Небо (шейдер)
+/* ---------- НЕБО ---------- */
 const skyUniforms = { uSunDir: { value: sunDir }, uTime: { value: 0 } };
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false, uniforms: skyUniforms,
@@ -146,7 +145,7 @@ const skyMat = new THREE.ShaderMaterial({
 const sky = new THREE.Mesh(new THREE.SphereGeometry(3200, 48, 32), skyMat);
 sky.frustumCulled = false; scene.add(sky);
 
-// Вода
+/* ---------- ВОДА ---------- */
 const WATER_SIZE = 1600, WATER_SEG = 320, WATER_CELL = WATER_SIZE / WATER_SEG;
 const waterGeo = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, WATER_SEG, WATER_SEG);
 waterGeo.rotateX(-Math.PI / 2);
@@ -211,7 +210,7 @@ const waterMat = new THREE.ShaderMaterial({
 const water = new THREE.Mesh(waterGeo, waterMat);
 water.frustumCulled = false; scene.add(water);
 
-// Волны для JS
+/* ---------- Волны для JS ---------- */
 function waveHeight(x, z, t) {
   let h = 0;
   h += 0.55 * Math.sin(( 0.7809 * x + 0.6247 * z) * 0.28 + t * 1.10);
@@ -221,7 +220,9 @@ function waveHeight(x, z, t) {
   return h;
 }
 
-// Остров + причалы (портирован без изменений)
+/* ============================================================
+   ОСТРОВ + ПРИЧАЛЫ + СКЛАДЫ + АНГАРЫ
+   ============================================================ */
 const ISLAND_POS = new THREE.Vector3(60, 0, 320);
 const islandRot  = Math.atan2(-ISLAND_POS.x, -ISLAND_POS.z);
 const portDir    = new THREE.Vector3(Math.sin(islandRot), 0, Math.cos(islandRot));
@@ -240,6 +241,7 @@ scene.add(islandGroup);
   const matRed=new THREE.MeshStandardMaterial({color:0xc0392b,roughness:.7});
   const matConc=new THREE.MeshStandardMaterial({color:0x9a9a94,roughness:.9});
 
+  // земля
   const sand=new THREE.Mesh(new THREE.SphereGeometry(R_SAND,48,28),matSand);
   sand.scale.set(1,.28,1); sand.position.y=-6; islandGroup.add(sand);
   const grass=new THREE.Mesh(new THREE.SphereGeometry(R_GRASS,44,24),matGrass);
@@ -248,6 +250,7 @@ scene.add(islandGroup);
   const grassY=d=>-4.5+.34*Math.sqrt(Math.max(0,R_GRASS*R_GRASS-d*d));
   const sandY=d=>-6+.28*Math.sqrt(Math.max(0,R_SAND*R_SAND-d*d));
 
+  /* ---------- ДЕРЕВЬЯ ---------- */
   const trunkGeo=new THREE.CylinderGeometry(.35,.5,3.2,6);
   const leafGeo=new THREE.ConeGeometry(2.6,6.5,7);
   const trunkMat=new THREE.MeshStandardMaterial({color:0x5b4228,roughness:1});
@@ -267,7 +270,7 @@ scene.add(islandGroup);
     islandGroup.add(t); placed++;
   }
 
-  // Главный причал
+  /* ---------- ГЛАВНЫЙ ПРИЧАЛ ---------- */
   const pier=new THREE.Group(); islandGroup.add(pier);
   const deck=new THREE.Mesh(new THREE.BoxGeometry(11,.9,88),matWood);
   deck.position.set(0,2.5,78); pier.add(deck);
@@ -281,7 +284,27 @@ scene.add(islandGroup);
     }
   }
 
-  // Малый причал (сюда приходит Джонсон)
+  /* ---------- КОНТЕЙНЕРЫ НА ГЛАВНОМ ПРИЧАЛЕ ---------- */
+  const contColors = [0xc0392b, 0x2e86c1, 0x27ae60, 0xe67e22, 0x8e44ad, 0xf1c40f];
+  for (let i = 0; i < 8; i++) {
+    const zz = 40 + i * 9.5;
+    if (zz > 116) break;
+    const cmat = new THREE.MeshStandardMaterial({ color: contColors[i % contColors.length], roughness: 0.75 });
+    const c = new THREE.Mesh(new THREE.BoxGeometry(3.6, 3.0, 7.5), cmat);
+    c.position.set((i % 2 === 0) ? -2.8 : 2.8, 2.95 + 1.5, zz);
+    pier.add(c);
+  }
+
+  /* ---------- КРАН ---------- */
+  const crane = new THREE.Group();
+  crane.position.set(0, 2.95, 112);
+  const cbase = new THREE.Mesh(new THREE.BoxGeometry(4, 1.5, 4), matDark); cbase.position.y = 0.75;
+  const cmast = new THREE.Mesh(new THREE.BoxGeometry(2, 18, 2), matRed);  cmast.position.y = 10.5;
+  const carm  = new THREE.Mesh(new THREE.BoxGeometry(24, 1.4, 1.4), matRed); carm.position.y = 20;
+  crane.add(cbase, cmast, carm);
+  pier.add(crane);
+
+  /* ---------- МАЛЫЙ ПРИЧАЛ (сюда приходит Джонсон) ---------- */
   const small=new THREE.Group(); islandGroup.add(small);
   const sdeck=new THREE.Mesh(new THREE.BoxGeometry(5,.6,36),matWood);
   sdeck.position.set(30,1.6,60); small.add(sdeck);
@@ -292,7 +315,107 @@ scene.add(islandGroup);
     }
   }
 
-  // Маяк
+  /* ========================================================
+     СКЛАДЫ И АНГАРЫ
+     ======================================================== */
+  const matCorr  = new THREE.MeshStandardMaterial({ color: 0xc4c8ce, roughness: 0.72, metalness: 0.15 });
+  const matCorr2 = new THREE.MeshStandardMaterial({ color: 0x8892a0, roughness: 0.78, metalness: 0.2  });
+  const matRoof  = new THREE.MeshStandardMaterial({ color: 0x4a545f, roughness: 0.82 });
+  const matDoor  = new THREE.MeshStandardMaterial({ color: 0x2c3540, roughness: 0.6  });
+  const matStripeB = new THREE.MeshStandardMaterial({ color: 0xe8b93a, roughness: 0.6 });
+  const matWin   = new THREE.MeshStandardMaterial({ color: 0x1a2633, roughness: 0.1, metalness: 0.85 });
+
+  const bldgs = [
+    // Склады
+    { type:'wh', x:  16, z:  46, w: 8,  h: 5, d: 12, rot:  0.10 },
+    { type:'wh', x:  18, z:  66, w: 8,  h: 5, d: 12, rot:  0.10 },
+    { type:'wh', x:  22, z:  90, w: 10, h: 6, d: 14, rot: -0.15 },
+    // Ангары
+    { type:'hg', x: -14, z:  50, r: 4,  len: 14, rot:  0.05 },
+    { type:'hg', x: -14, z:  74, r: 4,  len: 14, rot:  0.05 },
+    { type:'hg', x: -22, z: 100, r: 5,  len: 18, rot: -0.10 },
+  ];
+
+  for (const b of bldgs) {
+    const r = Math.hypot(b.x, b.z);
+    const y = Math.max(grassY(r), sandY(r));
+    const g = new THREE.Group();
+    g.position.set(b.x, y - 0.2, b.z);
+    g.rotation.y = b.rot;
+
+    if (b.type === 'wh') {
+      const body = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), matCorr);
+      body.position.y = b.h / 2;
+      g.add(body);
+
+      const roofL = new THREE.Mesh(new THREE.BoxGeometry(b.w / 2 + 0.2, 0.32, b.d + 0.5), matRoof);
+      roofL.position.set(-b.w / 4, b.h + 0.62, 0);
+      roofL.rotation.z = 0.18;
+      g.add(roofL);
+
+      const roofR = new THREE.Mesh(new THREE.BoxGeometry(b.w / 2 + 0.2, 0.32, b.d + 0.5), matRoof);
+      roofR.position.set(b.w / 4, b.h + 0.62, 0);
+      roofR.rotation.z = -0.18;
+      g.add(roofR);
+
+      const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.2, b.d + 0.6), matRoof);
+      ridge.position.set(0, b.h + 1.15, 0);
+      g.add(ridge);
+
+      const door = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.62, b.h * 0.72, 0.1), matDoor);
+      door.position.set(0, b.h * 0.36, b.d / 2 + 0.05);
+      g.add(door);
+
+      for (let i = 0; i < 5; i++) {
+        const s = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.62, 0.05, 0.03), matStripeB);
+        s.position.set(0, b.h * 0.08 + i * b.h * 0.14, b.d / 2 + 0.11);
+        g.add(s);
+      }
+
+      for (let side = -1; side <= 1; side += 2) {
+        for (let i = -1; i <= 1; i++) {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.9, 1.2), matWin);
+          win.position.set(side * (b.w / 2 + 0.02), b.h * 0.65, i * b.d * 0.28);
+          g.add(win);
+        }
+      }
+
+    } else if (b.type === 'hg') {
+      const cyl = new THREE.Mesh(
+        new THREE.CylinderGeometry(b.r, b.r, b.len, 22),
+        matCorr2
+      );
+      cyl.rotation.x = Math.PI / 2;
+      cyl.position.y = -b.r * 0.18;
+      g.add(cyl);
+
+      const gate = new THREE.Mesh(new THREE.PlaneGeometry(b.r * 1.35, b.r * 1.15), matDoor);
+      gate.position.set(0, b.r * 0.30, b.len / 2 + 0.03);
+      g.add(gate);
+
+      for (let i = 0; i < 4; i++) {
+        const s = new THREE.Mesh(new THREE.PlaneGeometry(b.r * 1.35, 0.07), matStripeB);
+        s.position.set(0, b.r * 0.30 - b.r * 0.4 + i * b.r * 0.28, b.len / 2 + 0.04);
+        g.add(s);
+      }
+
+      const back = new THREE.Mesh(new THREE.CircleGeometry(b.r, 22), matCorr2);
+      back.position.set(0, -b.r * 0.18, -b.len / 2 - 0.02);
+      back.rotation.y = Math.PI;
+      g.add(back);
+
+      const beacon = new THREE.Mesh(
+        new THREE.SphereGeometry(0.22, 10, 8),
+        new THREE.MeshStandardMaterial({ color: 0xff3030, emissive: 0xaa0000, emissiveIntensity: 0.8 })
+      );
+      beacon.position.set(0, b.r * 0.82, b.len / 2 - 1.0);
+      g.add(beacon);
+    }
+
+    islandGroup.add(g);
+  }
+
+  /* ---------- МАЯК ---------- */
   const lhx=-24,lhz=8;
   const lhd=Math.hypot(lhx,lhz);
   const lhy=Math.max(grassY(lhd),sandY(lhd));
@@ -313,7 +436,9 @@ scene.add(islandGroup);
   lh.add(tower,b1,b2,gal,lr,rf); islandGroup.add(lh);
 })();
 
-// Катер (упрощённый, но узнаваемый)
+/* ============================================================
+   КАТЕР
+   ============================================================ */
 function buildBoat(){
   const boat=new THREE.Group(); boat.rotation.order='YXZ';
   const matHull=new THREE.MeshStandardMaterial({color:0xf7f8f9,roughness:.28,metalness:.1});
@@ -376,7 +501,6 @@ function buildBoat(){
   const wsTop=new THREE.Mesh(new THREE.BoxGeometry(1.36,.07,.07),matChrome);
   wsTop.position.set(0,1.87,.58); boat.add(wsTop);
 
-  // Сиденья
   function makeSeat(x,z){
     const g=new THREE.Group();
     const ped=new THREE.Mesh(new THREE.CylinderGeometry(.09,.11,.58,12),matChrome); ped.position.y=.54;
@@ -411,7 +535,7 @@ function buildBoat(){
 }
 const boat = buildBoat(); scene.add(boat);
 
-// Частицы
+/* ---------- ЧАСТИЦЫ ---------- */
 const MAX_P=800;
 const pPos=new Float32Array(MAX_P*3), pSize=new Float32Array(MAX_P), pAlpha=new Float32Array(MAX_P);
 const pVel=new Float32Array(MAX_P*3), pLife=new Float32Array(MAX_P), pMaxLife=new Float32Array(MAX_P);
@@ -473,7 +597,7 @@ function updateP(dt,time){
   pGeo.attributes.alpha.needsUpdate=true;
 }
 
-// Джойстик
+/* ---------- ДЖОЙСТИК ---------- */
 const joyEl=document.getElementById('joy'), knobEl=document.getElementById('knob');
 let jx=0,jy=0,joyActive=false;
 function joyMove(e){
@@ -496,7 +620,7 @@ joyEl.addEventListener('lostpointercapture',()=>joyReset());
 
 setTimeout(()=>{const h=document.getElementById('hint');if(h){h.style.opacity='0';setTimeout(()=>h.style.display='none',1600);}},6400);
 
-// Камера — вращение пальцем, вид от капитана
+/* ---------- КАМЕРА ---------- */
 let firstPerson=false, fpYaw=0, fpPitch=0;
 const exitHint=document.getElementById('exitFP');
 const dragging={active:false};
@@ -553,7 +677,7 @@ el.addEventListener('pointerup',endDrag);
 el.addEventListener('pointercancel',()=>{dragging.active=false;});
 el.addEventListener('lostpointercapture',()=>{dragging.active=false;});
 
-// Физика
+/* ---------- ФИЗИКА ---------- */
 const boatPos=new THREE.Vector3(0,0,0);
 let heading=0, speed=0;
 const MAX_SPEED=15, MAX_REVERSE=-4.5;
@@ -567,7 +691,7 @@ function lerpAngle(a,b,t){
   return a+d*t;
 }
 
-// Миникарта
+/* ---------- МИНИКАРТА ---------- */
 const mapCanvas=document.getElementById('map');
 const mctx=mapCanvas.getContext('2d');
 const MAP_W=320,MAP_H=320,MAP_CX=MAP_W/2,MAP_CY=MAP_H/2,MAP_R=MAP_W/2-6;
@@ -578,6 +702,7 @@ function drawMap(){
   mctx.clearRect(0,0,MAP_W,MAP_H);
   mctx.save(); mctx.beginPath(); mctx.arc(MAP_CX,MAP_CY,MAP_R,0,Math.PI*2);
   mctx.fillStyle='rgba(8,24,40,.42)'; mctx.fill(); mctx.clip();
+
   mctx.strokeStyle='rgba(255,255,255,.1)'; mctx.lineWidth=1;
   const half=MAP_RANGE/2;
   const gx0=Math.floor((boatPos.x-half)/100)*100;
@@ -588,6 +713,7 @@ function drawMap(){
   for(let gz=gz0;gz<=boatPos.z+half;gz+=100){
     const py=w2my(gz); mctx.beginPath(); mctx.moveTo(0,py); mctx.lineTo(MAP_W,py); mctx.stroke();
   }
+
   const ix=w2mx(ISLAND_POS.x), iy=w2my(ISLAND_POS.z);
   if(Math.hypot(ix-MAP_CX,iy-MAP_CY)<MAP_R+60){
     mctx.fillStyle='rgba(232,216,168,.8)';
@@ -595,30 +721,55 @@ function drawMap(){
     mctx.fillStyle='rgba(92,138,74,.92)';
     mctx.beginPath(); mctx.arc(ix,iy,50*MAP_S,0,Math.PI*2); mctx.fill();
   }
-  // Джонсон на карте (звёздочка)
-  if(window.johnsonMarker){
-    const jx_=w2mx(window.johnsonMarker.x), jy_=w2my(window.johnsonMarker.z);
+
+  // Джонсон на карте
+  if(window.GAME.johnsonMarker){
+    const jx_=w2mx(window.GAME.johnsonMarker.x), jy_=w2my(window.GAME.johnsonMarker.z);
     if(Math.hypot(jx_-MAP_CX,jy_-MAP_CY)<MAP_R){
       mctx.fillStyle='#ff5566';
       mctx.beginPath(); mctx.arc(jx_,jy_,4,0,Math.PI*2); mctx.fill();
       mctx.strokeStyle='#fff'; mctx.lineWidth=1.5; mctx.stroke();
     }
   }
+
   mctx.lineCap='round';
   mctx.strokeStyle='rgba(205,180,140,.95)'; mctx.lineWidth=3.5;
   mctx.beginPath();
   mctx.moveTo(w2mx(ISLAND_POS.x+portDir.x*34), w2my(ISLAND_POS.z+portDir.z*34));
   mctx.lineTo(w2mx(ISLAND_POS.x+portDir.x*122), w2my(ISLAND_POS.z+portDir.z*122));
   mctx.stroke();
+
+  /* ============ СТРЕЛКА НАПРАВЛЕНИЯ (УВЕЛИЧЕННАЯ) ============ */
   mctx.save();
-  mctx.translate(MAP_CX,MAP_CY); mctx.rotate(heading);
+  mctx.translate(MAP_CX,MAP_CY);
+  mctx.rotate(heading);
+
+  // свечение
+  mctx.shadowColor = 'rgba(255,209,102,.85)';
+  mctx.shadowBlur = 14;
+
+  // стрелка (в 2.5 раза крупнее)
   mctx.beginPath();
-  mctx.moveTo(0,-10); mctx.lineTo(6.5,8); mctx.lineTo(0,4.5); mctx.lineTo(-6.5,8);
+  mctx.moveTo(0,-26);
+  mctx.lineTo(17, 21);
+  mctx.lineTo(0, 13);
+  mctx.lineTo(-17, 21);
   mctx.closePath();
   mctx.fillStyle='#ffd166'; mctx.fill();
-  mctx.strokeStyle='rgba(0,0,0,.65)'; mctx.lineWidth=1.6; mctx.stroke();
+
+  // обводка
+  mctx.shadowBlur = 0;
+  mctx.strokeStyle='rgba(0,0,0,.8)'; mctx.lineWidth=2.2; mctx.stroke();
+
+  // белая точка в центре
+  mctx.beginPath();
+  mctx.arc(0,0,3.8,0,Math.PI*2);
+  mctx.fillStyle='#ffffff'; mctx.fill();
+
   mctx.restore();
+
   mctx.restore();
+
   mctx.beginPath(); mctx.arc(MAP_CX,MAP_CY,MAP_R,0,Math.PI*2);
   mctx.strokeStyle='rgba(180,220,255,.55)'; mctx.lineWidth=3; mctx.stroke();
   mctx.fillStyle='rgba(225,240,255,.95)';
@@ -626,7 +777,7 @@ function drawMap(){
   mctx.fillText('N',MAP_CX,17);
 }
 
-// Цикл
+/* ---------- ЦИКЛ ---------- */
 const clock=new THREE.Clock();
 let time=0;
 const fpOff=new THREE.Vector3(), fpDir=new THREE.Vector3(), fpTgt=new THREE.Vector3();
@@ -748,17 +899,16 @@ window.addEventListener('resize',()=>{
 
 camera.position.set(0,8,-16); camera.lookAt(0,1,0);
 
-// Экспорт для johnson.js
+/* ---------- ЭКСПОРТ ДЛЯ johnson.js ---------- */
 window.GAME = {
   scene, camera, islandGroup, boat,
   boatPos,
   getTime: () => time,
   waveHeight,
-  // Для карты — маркер Джонсона
   johnsonMarker: null
 };
 
-// PWA
+/* ---------- PWA ---------- */
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
     navigator.serviceWorker.register('service-worker.js').catch(()=>{});
@@ -769,7 +919,6 @@ animate();
 })();
 </script>
 
-<!-- ⬇️ ЗДЕСЬ ПОДКЛЮЧАЕТСЯ КОД ДЖОНСОНА — мы будем его менять -->
 <script src="johnson.js"></script>
 
 </body>
