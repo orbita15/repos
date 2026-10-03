@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Api.Airforce — генерация музыки</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 16px; }
+  input, textarea, select, button { font: inherit; padding: 8px; box-sizing: border-box; width: 100%; }
+  .row { margin-bottom: 12px; }
+  button { cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  pre { background: #f5f5f5; padding: 12px; border-radius: 8px; max-height: 220px; overflow: auto;
+        white-space: pre-wrap; font-size: 13px; }
+  audio { width: 100%; margin-top: 12px; }
+  .warn { background: #fff4e5; border: 1px solid #ffcc80; padding: 10px 12px; border-radius: 8px;
+          font-size: 13px; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  label.inline { display: flex; align-items: center; gap: 8px; width: auto; }
+  label.inline input { width: auto; }
+  .hint { font-size: 12px; color: #666; margin-top: 4px; }
+</style>
+</head>
+<body>
+  <h1>Генерация музыки через Api.Airforce</h1>
+  <div class="warn">
+    🔑 Ключ не сохраняется на сервере и живёт только в этой вкладке. Не публикуйте страницу в интернет —
+    введите свой <code>sk-air-...</code> вручную.
+  </div>
+
+  <div class="row">
+    <input id="apiKey" type="password" placeholder="sk-air-..." autocomplete="off">
+    <div class="hint">Ключ из <a href="https://api.airforce/dashboard/?tab=api-keys" target="_blank" rel="noopener">панели управления</a> → API-ключи</div>
+  </div>
+
+  <div class="row">
+    <input id="model" type="text" value="suno-v5" placeholder="Модель">
+    <div class="hint">Например: suno-v5, suno-v4.5, music-v1. Актуальный список — на странице моделей.</div>
+  </div>
+
+  <div class="row">
+    <textarea id="prompt" rows="3" placeholder="Опишите трек: стиль, настроение, инструменты…"></textarea>
+  </div>
+
+  <div class="grid">
+    <div class="row">
+      <input id="style" type="text" value="pop" placeholder="Стиль (теги)">
+    </div>
+    <div class="row">
+      <input id="duration" type="number" min="10" max="300" value="60" placeholder="Длительность, сек">
+    </div>
+  </div>
+
+  <div class="row">
+    <label class="inline"><input id="instrumental" type="checkbox"> Инструментал (без вокала)</label>
+  </div>
+
+  <div class="row">
+    <button id="btn">Сгенерировать</button>
+  </div>
+
+  <pre id="log"></pre>
+  <div id="player"></div>
+
+<script>
+const API_BASE = 'https://api.airforce';
+const $ = (id) => document.getElementById(id);
+const logEl = $('log');
+const log = (m) => { logEl.textContent += m + '\n'; logEl.scrollTop = logEl.scrollHeight; };
+
+let busy = false;
+
+function getKey() {
+  const k = $('apiKey').value.trim();
+  if (!k) throw new Error('Введите API-ключ');
+  if (!k.startsWith('sk-air-')) throw new Error('Ключ должен начинаться с sk-air-');
+  return k;
+}
+
+function renderAudio(src) {
+  const box = $('player');
+  box.innerHTML = '';
+  const audio = document.createElement('audio');
+  audio.controls = true;
+  audio.autoplay = true;
+  audio.src = src;
+  const link = document.createElement('a');
+  link.href = src;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = 'Открыть / скачать';
+  box.append(audio, document.createElement('br'), link);
+}
+
+// Извлекает ссылки на аудио из разных возможных структур ответа Suno
+function extractAudioUrls(data) {
+  const out = [];
+  const walk = (v) => {
+    if (!v) return;
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (typeof v === 'object') {
+      for (const [k, val] of Object.entries(v)) {
+        if (typeof val === 'string' &&
+            /^https?:\/\//.test(val) &&
+            /\.(mp3|wav|m4a|ogg)(\?|$)/i.test(val)) {
+          out.push(val);
+        } else {
+          walk(val);
+        }
+      }
+    }
+  };
+  walk(data);
+  return [...new Set(out)];
+}
+
+$('btn').addEventListener('click', async () => {
+  if (busy) return;
+  busy = true;
+  $('btn').disabled = true;
+  logEl.textContent = '';
+  $('player').innerHTML = '';
+
+  try {
+    const key = getKey();
+    const model = $('model').value.trim() || 'suno-v5';
+    const prompt = $('prompt').value.trim();
+    const style = $('style').value.trim();
+    const instrumental = $('instrumental').checked;
+    const duration = Number($('duration').value) || undefined;
+
+    if (!prompt && !style) throw new Error('Опишите трек в prompt или style');
+
+    // Для Suno style уходит отдельным полем, для нативных моделей — частью prompt
+    const body = {
+      model,
+      prompt: [prompt, style ? `Style: ${style}` : ''].filter(Boolean).join('\n'),
+      instrumental,
+    };
+    if (duration && model.startsWith('suno-') === false) {
+      body.duration_seconds = duration;
+    }
+
+    log('POST ' + API_BASE + '/v1/audio/music');
+    log('Тело: ' + JSON.stringify(body));
+
+    const res = await fetch(API_BASE + '/v1/audio/music', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + key,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const ctype = res.headers.get('content-type') || '';
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`HTTP ${res.status}: ${text.slice(0, 300)}`);
+    }
+
+    // Случай 1: сервер вернул бинарный аудиофайл
+    if (ctype.startsWith('audio/') || ctype === 'application/octet-stream') {
+      log('Получен бинарный аудиофайл (' + ctype + ')');
+      const blob = await res.blob();
+      renderAudio(URL.createObjectURL(blob));
+      log('🎵 Готово');
+      return;
+    }
+
+    // Случай 2: JSON (Suno-модели) — ссылки или task_id
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error('Неожиданный формат ответа: ' + text.slice(0, 200)); }
+
+    log('Ответ: ' + JSON.stringify(data, null, 2).slice(0, 800));
+
+    const urls = extractAudioUrls(data);
+    if (urls.length) {
+      renderAudio(urls[0]);
+      log('🎵 Готово: найдено ссылок — ' + urls.length);
+      return;
+    }
+
+    const taskId = data?.task_id || data?.id || data?.data?.task_id;
+    if (taskId) {
+      log('Задача создана, task_id = ' + taskId);
+      log('У этой модели нет публичного эндпоинта опроса статуса —');
+      log('проверьте трек на странице генерации Api.Airforce по этому ID.');
+      return;
+    }
+
+    log('Готово, но аудио в ответе не найдено. Проверьте структуру ответа выше.');
+  } catch (e) {
+    log('Ошибка: ' + e.message);
+  } finally {
+    busy = false;
+    $('btn').disabled = false;
+  }
+});
+</script>
+</body>
+</html>
