@@ -68,15 +68,7 @@
         #moveHint.hidden { opacity: 0; }
         @media (pointer: coarse) { #moveHint { display: none; } }
 
-        /* === Индикатор мультиплеера === */
-        #netHud {
-            position: absolute; top: 20px; right: 80px; z-index: 100;
-            color: #fff; background: rgba(0,0,0,0.65);
-            padding: 6px 12px; border-radius: 8px;
-            font-size: 12px; pointer-events: none;
-            border: 1px solid rgba(77,255,154,0.35);
-            font-family: monospace;
-        }
+        #netHud { position: absolute; top: 20px; right: 80px; z-index: 100; color: #fff; background: rgba(0,0,0,0.65); padding: 6px 12px; border-radius: 8px; font-size: 12px; pointer-events: none; border: 1px solid rgba(77,255,154,0.35); font-family: monospace; }
         #netHud.off { border-color: rgba(255,91,91,0.45); color: #ff8b8b; }
 
         @media (max-width: 600px) {
@@ -1186,7 +1178,7 @@
         const myColor = randomCharColor();
         const peers = {};
 
-        // === Хелпер: "капсула" из цилиндра + 2 сфер (замена CapsuleGeometry для r128) ===
+        // Хелпер: "капсула" из цилиндра + 2 сфер (замена CapsuleGeometry для r128)
         function makeCapsule(radius, length, radialSeg, mat) {
             const g = new THREE.Group();
             const cylH = length;
@@ -1308,26 +1300,22 @@
         // ============================================================
         const netHud = document.getElementById('netHud');
 
-        // Свой уникальный ID (используется и в BC, и в WebRTC)
         const myId = 'u-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
 
-        let bc = null;                // BroadcastChannel
-        let room = null;              // Trystero room
+        let bc = null;
+        let room = null;
         let posAction = null;
         let joinAction = null;
         let leaveAction = null;
         let webrtcReady = false;
 
-        // --- ЕДИНАЯ ОТПРАВКА: во все доступные каналы ---
         function netSend(msg) {
             msg.from = myId;
 
-            // BroadcastChannel (вкладки одного браузера)
             if (bc) {
                 try { bc.postMessage(msg); } catch (e) {}
             }
 
-            // WebRTC (другие браузеры/устройства)
             if (webrtcReady) {
                 try {
                     if (msg.type === 'pos' && posAction) posAction.send(msg);
@@ -1337,7 +1325,6 @@
             }
         }
 
-        // --- ЕДИНЫЙ ПРИЁМ: из любого канала ---
         function netReceive(msg) {
             if (!msg || typeof msg !== 'object') return;
             if (msg.from === myId) return;
@@ -1352,7 +1339,6 @@
                     if (typeof msg.x === 'number') peers[msg.from].targetX = msg.x;
                     if (typeof msg.z === 'number') peers[msg.from].targetZ = msg.z;
                 }
-                // Отвечаем своей позицией, чтобы новый сразу увидел нас
                 if (myCharacter) {
                     netSend({
                         type: 'pos',
@@ -1397,14 +1383,39 @@
             console.warn('[MP] BroadcastChannel недоступен:', e);
         }
 
-        // --- WebRTC через Trystero (MQTT-стратегия) ---
+        // --- WebRTC через Trystero (MQTT-стратегия, новый пакет) ---
         async function initMultiplayer() {
             try {
                 pushLog('⏳ WebRTC подключение…');
-                const mod = await import('https://esm.sh/trystero@0.21.6/mqtt');
+                const mod = await import('https://esm.sh/@trystero-p2p/mqtt');
                 const joinRoom = mod.joinRoom;
 
-                room = joinRoom({ appId: 'cinema-parking-multiplayer-v3' }, 'main');
+                room = joinRoom({
+                    appId: 'cinema-parking-multiplayer-v4',
+                    // STUN + публичный TURN (OpenRelay) для обхода NAT
+                    rtcConfig: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' },
+                            { urls: 'stun:global.stun.twilio.com:3478' },
+                            {
+                                urls: 'turn:openrelay.metered.ca:80',
+                                username: 'openrelayproject',
+                                credential: 'openrelayproject'
+                            },
+                            {
+                                urls: 'turn:openrelay.metered.ca:443',
+                                username: 'openrelayproject',
+                                credential: 'openrelayproject'
+                            },
+                            {
+                                urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                                username: 'openrelayproject',
+                                credential: 'openrelayproject'
+                            }
+                        ]
+                    }
+                }, 'main');
 
                 posAction   = room.makeAction('pos');
                 joinAction  = room.makeAction('join');
@@ -1416,7 +1427,6 @@
 
                 room.onPeerJoin = (peerId) => {
                     console.log('[MP] peer join', peerId);
-                    // Отправляем этому пиру нашу позицию и join
                     try {
                         if (myCharacter) {
                             const jmsg = {
@@ -1463,7 +1473,7 @@
             });
         }, 100);
 
-        // --- Объявляем о себе через 500мс (чтобы BC уже был готов) ---
+        // --- Объявляем о себе через 500мс ---
         setTimeout(() => {
             if (!myCharacter) return;
             netSend({
@@ -1475,7 +1485,7 @@
             pushLog('📢 Я в эфире');
         }, 500);
 
-        // --- Периодически повторяем join (на случай если кто-то пропустил) ---
+        // --- Периодически повторяем join ---
         setInterval(() => {
             if (!myCharacter) return;
             netSend({
