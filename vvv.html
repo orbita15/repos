@@ -2,7 +2,8 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>PeerJS P2P Чат</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trystero P2P Чат</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -12,7 +13,7 @@
       background: #f0f2f5;
     }
     h1 { color: #333; }
-    #myId {
+    #roomInfo {
       background: #fff;
       padding: 10px 12px;
       border-radius: 8px;
@@ -25,9 +26,7 @@
       justify-content: space-between;
       gap: 10px;
     }
-    #myId .id-text {
-      flex: 1;
-    }
+    #roomInfo .id-text { flex: 1; }
     .copy-btn {
       background: #28a745;
       color: #fff;
@@ -55,6 +54,7 @@
       cursor: pointer;
     }
     button:hover { background: #0056b3; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
     #chat {
       background: #fff;
       border-radius: 8px;
@@ -71,20 +71,12 @@
       max-width: 80%;
       word-wrap: break-word;
     }
-    .me {
-      background: #dcf8c6;
-      margin-left: auto;
-      text-align: right;
-    }
-    .them {
-      background: #e9e9eb;
-      margin-right: auto;
-    }
+    .me { background: #dcf8c6; margin-left: auto; text-align: right; }
+    .them { background: #e9e9eb; margin-right: auto; }
+    .system { text-align: center; font-size: 12px; color: #888; }
     .status { font-size: 13px; color: #666; margin: 5px 0; }
     .row { display: flex; gap: 8px; }
     .row input { flex: 1; }
-
-    /* Всплывающее уведомление */
     #toast {
       position: fixed;
       bottom: 30px;
@@ -98,129 +90,190 @@
       pointer-events: none;
       transition: opacity 0.3s, transform 0.3s;
       font-size: 14px;
+      z-index: 999;
     }
-    #toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   </style>
 </head>
 <body>
-  <h1>🔗 PeerJS P2P Чат</h1>
+  <h1>🔗 Trystero P2P Чат</h1>
 
-  <div id="myId">
-    <span class="id-text">Ваш ID: <span id="peerId">загрузка...</span></span>
-    <button class="copy-btn" id="copyBtn" onclick="copyMyId()">📋 Копировать</button>
+  <div id="roomInfo">
+    <span class="id-text">Комната: <span id="roomId">загрузка...</span></span>
+    <button class="copy-btn" id="copyBtn" onclick="copyRoomId()">📋 Копировать</button>
   </div>
 
-  <div class="status">Подключиться к другому пользователю:</div>
+  <div class="status">Присоединиться к другой комнате:</div>
   <div class="row">
-    <input id="remoteId" placeholder="Введите ID собеседника" />
-    <button onclick="connectToPeer()">Подключиться</button>
+    <input id="joinRoomInput" placeholder="Введите ID комнаты" />
+    <button onclick="switchRoom()">Войти</button>
   </div>
 
-  <div class="status" id="status">Статус: не подключён</div>
+  <div class="status" id="status">Статус: подключение...</div>
+  <div class="status" id="peersList">Участников: 0</div>
 
   <div id="chat"></div>
 
   <div class="row" style="margin-top:10px">
     <input id="msgInput" placeholder="Введите сообщение..."
            onkeydown="if(event.key==='Enter') sendMessage()" />
-    <button onclick="sendMessage()">Отправить</button>
+    <button id="sendBtn" onclick="sendMessage()" disabled>Отправить</button>
   </div>
 
   <div id="toast">ID скопирован!</div>
 
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- Trystero подключается как ES-модуль с CDN -->
+  <script type="module">
+    import { joinRoom } from 'https://esm.run/trystero';
+    // Альтернативные CDN:
+    // import { joinRoom } from 'https://cdn.skypack.dev/trystero';
+    // import { joinRoom } from 'https://cdn.jsdelivr.net/npm/trystero@0.21.5/+esm';
 
-  <script>
-    const myId = 'user-' + Math.random().toString(36).substring(2, 8);
-    document.getElementById('peerId').textContent = myId;
+    // ====== КОНФИГУРАЦИЯ ======
+    // appId — уникальная строка для вашего приложения.
+    // Меняйте её, чтобы не пересекаться с другими приложениями на Trystero.
+    const APP_ID = 'my-p2p-chat-app-' + 'v1';
 
-    const peer = new Peer(myId, { debug: 2 });
-    let conn = null;
+    // Комната по умолчанию (можно сгенерировать случайную)
+    let currentRoomId = localStorage.getItem('trystero-room') ||
+                        'room-' + Math.random().toString(36).substring(2, 8);
+    localStorage.setItem('trystero-room', currentRoomId);
 
-    peer.on('open', (id) => {
-      console.log('Мой Peer ID:', id);
-      setStatus('Готов. Ваш ID: ' + id);
-    });
+    document.getElementById('roomId').textContent = currentRoomId;
 
-    peer.on('error', (err) => {
-      console.error(err);
-      setStatus('Ошибка: ' + err.type);
-    });
+    // ====== СОСТОЯНИЕ ======
+    let room = null;
+    let sendMessageAction = null;
+    let sendTypingAction = null;
+    let peersCount = 0;
 
-    peer.on('connection', (connection) => {
-      conn = connection;
-      setupConnection();
-    });
+    // ====== ПОДКЛЮЧЕНИЕ К КОМНАТЕ ======
+    function connectToRoom(roomId) {
+      // Отключаемся от старой комнаты
+      if (room) {
+        try { room.leave(); } catch (e) { /* ignore */ }
+      }
 
-    function connectToPeer() {
-      const remoteId = document.getElementById('remoteId').value.trim();
-      if (!remoteId) return alert('Введите ID');
-      if (remoteId === myId) return alert('Нельзя подключиться к самому себе');
-      conn = peer.connect(remoteId);
-      setupConnection();
+      room = joinRoom({ appId: APP_ID }, roomId);
+      console.log('✅ Подключено к комнате:', roomId);
+      setStatus('✅ В комнате: ' + roomId);
+      updatePeersList();
+
+      // === Действия (actions) ===
+      // Действие для сообщений
+      const [sendMsg, getMsg] = room.makeAction('message');
+      sendMessageAction = sendMsg;
+
+      getMsg((data, peerId) => {
+        console.log(`📥 Сообщение от ${peerId}:`, data);
+        addMessage(data.text, 'them');
+      });
+
+      // Действие для индикатора "печатает..."
+      const [sendTyping, getTyping] = room.makeAction('typing');
+      sendTypingAction = sendTyping;
+
+      getTyping((data, peerId) => {
+        console.log(`✍️ ${peerId} печатает...`);
+        setStatus(`✍️ ${peerId} печатает...`);
+        clearTimeout(window._typingTimer);
+        window._typingTimer = setTimeout(() => setStatus('✅ В комнате: ' + currentRoomId), 1500);
+      });
+
+      // === События участников ===
+      room.onPeerJoin = (peerId) => {
+        console.log(`👋 ${peerId} присоединился`);
+        addMessage(`${peerId} присоединился`, 'system');
+        updatePeersList();
+        // Отправляем приветствие
+        sendMsg({ text: `Привет! Я ${room.selfId.substring(0, 8)}` });
+      };
+
+      room.onPeerLeave = (peerId) => {
+        console.log(`👋 ${peerId} покинул комнату`);
+        addMessage(`${peerId} покинул комнату`, 'system');
+        updatePeersList();
+      };
+
+      // Разблокируем кнопку отправки
+      document.getElementById('sendBtn').disabled = false;
+
+      return room;
     }
 
-    function setupConnection() {
-      conn.on('open', () => {
-        setStatus('✅ Подключено к ' + conn.peer);
-        addMessage('Соединение установлено', 'system');
-      });
-      conn.on('data', (data) => addMessage(data, 'them'));
-      conn.on('close', () => {
-        setStatus('❌ Соединение закрыто');
-        conn = null;
-      });
-      conn.on('error', (err) => setStatus('Ошибка соединения: ' + err));
-    }
-
+    // ====== ОТПРАВКА СООБЩЕНИЯ ======
     function sendMessage() {
       const input = document.getElementById('msgInput');
       const text = input.value.trim();
       if (!text) return;
-      if (!conn || !conn.open) {
-        alert('Нет активного соединения');
-        return;
+      if (!sendMessageAction) return alert('Комната не готова');
+
+      try {
+        sendMessageAction({ text: text, from: room.selfId });
+        addMessage(text, 'me');
+        input.value = '';
+      } catch (e) {
+        console.error('Ошибка отправки:', e);
+        alert('Не удалось отправить: ' + e.message);
       }
-      conn.send(text);
-      addMessage(text, 'me');
-      input.value = '';
     }
 
+    // ====== СМЕНА КОМНАТЫ ======
+    function switchRoom() {
+      const newRoomId = document.getElementById('joinRoomInput').value.trim();
+      if (!newRoomId) return alert('Введите ID комнаты');
+      if (newRoomId === currentRoomId) return alert('Вы уже в этой комнате');
+
+      // Меняем localStorage и переподключаемся
+      currentRoomId = newRoomId;
+      localStorage.setItem('trystero-room', currentRoomId);
+      document.getElementById('roomId').textContent = currentRoomId;
+
+      // Очищаем чат
+      document.getElementById('chat').innerHTML = '';
+
+      // Подключаемся заново
+      connectToRoom(currentRoomId);
+    }
+
+    // ====== ОБНОВЛЕНИЕ СПИСКА УЧАСТНИКОВ ======
+    function updatePeersList() {
+      if (!room) return;
+      const peers = Object.keys(room.getPeers());
+      peersCount = peers.length;
+      document.getElementById('peersList').textContent =
+        `Участников: ${peersCount} ${peers.length ? '(' + peers.map(p => p.substring(0, 6)).join(', ') + ')' : ''}`;
+    }
+
+    // ====== ДОБАВЛЕНИЕ СООБЩЕНИЯ В ЧАТ ======
     function addMessage(text, who) {
       const chat = document.getElementById('chat');
       const div = document.createElement('div');
-      div.className = 'msg ' + (who === 'system' ? '' : who);
-      if (who === 'system') {
-        div.style.textAlign = 'center';
-        div.style.fontSize = '12px';
-        div.style.color = '#888';
-      }
+      div.className = 'msg ' + who;
       div.textContent = text;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
 
+    // ====== СТАТУС ======
     function setStatus(text) {
       document.getElementById('status').textContent = 'Статус: ' + text;
     }
 
-    // ====== КОПИРОВАНИЕ ID В БУФЕР ======
-    function copyMyId() {
-      const id = document.getElementById('peerId').textContent;
+    // ====== КОПИРОВАНИЕ ID КОМНАТЫ ======
+    function copyRoomId() {
+      const id = document.getElementById('roomId').textContent;
       const btn = document.getElementById('copyBtn');
 
-      // Современный API
       if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(id).then(() => onCopied(btn)).catch(() => fallbackCopy(id, btn));
+        navigator.clipboard.writeText(id)
+          .then(() => onCopied(btn))
+          .catch(() => fallbackCopy(id, btn));
       } else {
         fallbackCopy(id, btn);
       }
     }
 
-    // Резервный способ (для http:// и старых браузеров)
     function fallbackCopy(text, btn) {
       const textarea = document.createElement('textarea');
       textarea.value = text;
@@ -240,7 +293,7 @@
     function onCopied(btn) {
       btn.textContent = '✅ Скопировано';
       btn.classList.add('copied');
-      showToast('ID скопирован в буфер обмена!');
+      showToast('ID комнаты скопирован!');
       setTimeout(() => {
         btn.textContent = '📋 Копировать';
         btn.classList.remove('copied');
@@ -254,6 +307,19 @@
       clearTimeout(toast._timer);
       toast._timer = setTimeout(() => toast.classList.remove('show'), 1800);
     }
+
+    // ====== ЗАПУСК ======
+    connectToRoom(currentRoomId);
+
+    // Индикатор "печатает..." при вводе
+    document.getElementById('msgInput').addEventListener('input', () => {
+      if (sendTypingAction) sendTypingAction({ typing: true });
+    });
+
+    // При закрытии страницы — покидаем комнату
+    window.addEventListener('beforeunload', () => {
+      if (room) try { room.leave(); } catch (e) { /* ignore */ }
+    });
   </script>
 </body>
 </html>
