@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>100 известных скульптур мира</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f0eb;
+            padding: 2rem 1rem;
+            color: #2c2c2c;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.2rem;
+            margin-bottom: 0.5rem;
+            letter-spacing: 0.5px;
+            color: #3b2e2a;
+        }
+
+        .subtitle {
+            text-align: center;
+            font-size: 1rem;
+            color: #7a6b64;
+            margin-bottom: 2.5rem;
+            font-style: italic;
+        }
+
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 1.5rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .card img {
+            width: 100%;
+            height: 280px;
+            object-fit: cover;
+            display: block;
+            background: #e8e0d8;
+        }
+
+        .card .caption {
+            padding: 0.9rem 1rem 1.1rem;
+            font-size: 0.92rem;
+            line-height: 1.4;
+            color: #3b2e2a;
+            flex-grow: 1;
+            border-top: 1px solid #f0e8e0;
+        }
+
+        .card .caption strong {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            font-size: 0.95rem;
+        }
+
+        .card .caption span {
+            color: #8a7a72;
+            font-size: 0.85rem;
+        }
+
+        /* --- Последовательная загрузка --- */
+        .js-loading .card img {
+            opacity: 0;
+            transition: opacity 0.25s ease-in;
+        }
+        .js-loading .card img.loaded {
+            opacity: 1;
+        }
+
+        #load-status {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            background: rgba(0, 0, 0, 0.75);
+            color: #fff;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-family: sans-serif;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        @media (max-width: 480px) {
+            .gallery {
+                grid-template-columns: 1fr 1fr;
+                gap: 0.8rem;
+            }
+            .card img {
+                height: 180px;
+            }
+            .card .caption {
+                font-size: 0.8rem;
+                padding: 0.6rem;
+            }
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<h1>100 известных скульптур мира</h1>
+<p class="subtitle">От доисторических фигурок до современных монументов</p>
+
+<div class="gallery">
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Loewenmensch2.jpg" alt="Лёвенменш (Человек-лев)">
+        <div class="caption"><strong>Лёвенменш (Человек-лев)</strong><span>ок. 35 000–40 000 лет назад, пещера Холенштайн-Штадель, Германия</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Venus-de-Laussel-vue-generale-noir.jpg" alt="Венера из Лосселя">
+        <div class="caption"><strong>Венера из Лосселя</strong><span>ок. 27 000 лет назад, верхний палеолит, музей Бордо, Франция</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Venus_of_Willendorf_frontview_retouched_2.jpg" alt="Венера Виллендорфская">
+        <div class="caption"><strong>Венера Виллендорфская</strong><span>ок. 25 000–30 000 лет назад, Naturhistorisches Museum, Вена</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Venus_of_Brassempouy.jpg" alt="Венера из Брассемпуи">
+        <div class="caption"><strong>Венера из Брассемпуи</strong><span>ок. 25 000 г. до н.э., музей Брассемпуи, Франция</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Urfa_man.jpg" alt="Урфийский человек">
+        <div class="caption"><strong>Урфийский человек</strong><span>ок. 9 000 г. до н.э., музей Шанлыурфа, Турция</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Lovers_9000BC_british_museum.jpg" alt="Айн Сахри">
+        <div class="caption"><strong>Айн Сахри (Влюблённые)</strong><span>ок. 9 000 г. до н.э., Британский музей, Лондон</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Mesopotamia_male_worshiper_2750-2600_B.C.jpg" alt="Месопотамский молящийся">
+        <div class="caption"><strong>Месопотамский молящийся</strong><span>2750–2600 гг. до н.э., Метрополитен-музей, Нью-Йорк</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Figure_cycladique_Louvre_Ma2709.png" alt="Кикладская фигура">
+        <div class="caption"><strong>Кикладская фигура (голова)</strong><span>ок. 2700 г. до н.э., Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Harpist_of_Keros,_NAMA3908,_Athens,_Greece1.jpg" alt="Арфист с Кероса">
+        <div class="caption"><strong>Арфист с Кероса</strong><span>ок. 2600 г. до н.э., Национальный археологический музей, Афины</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Ägyptisches_Museum_Kairo_2016-03-29_Rahotep_Nofret_01.jpg" alt="Ранотет и Нофрет">
+        <div class="caption"><strong>Ранотет и Нофрет</strong><span>2650–2610 гг. до н.э., Египетский музей, Каир</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Great_Sphinx_of_Giza_(أبو_الهول).jpg" alt="Большой Сфинкс">
+        <div class="caption"><strong>Большой Сфинкс в Гизе</strong><span>ок. 2558–2532 гг. до н.э., Гиза, Египет</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Ägyptisches_Museum_Kairo_2016-03-29_Ka-aper_02.jpg" alt="Статуя Каапера">
+        <div class="caption"><strong>Статуя Каапера (Сельский староста)</strong><span>ок. 2500 г. до н.э., Египетский музей, Каир</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Goulandris_Master_-_Cycladic_Female_Figurine_-_Walters_23253.jpg" alt="Кикладская женская фигурка">
+        <div class="caption"><strong>Кикладская женская фигурка</strong><span>2500–2400 гг. до н.э., Walters Art Museum, Балтимор</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/King_Menkaura_(Mycerinus)_and_queen.jpg" alt="Менкаура и царица">
+        <div class="caption"><strong>Менкаура и царица</strong><span>2490–2472 гг. до н.э., Музей изящных искусств, Бостон</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/The_seated_scribe-E_3023-IMG_4267-gradient.jpg" alt="Сидящий писец">
+        <div class="caption"><strong>Сидящий писец</strong><span>ок. 2450–2325 гг. до н.э., Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Sargon_of_Akkad_(frontal).jpg" alt="Голова Саргона Аккадского">
+        <div class="caption"><strong>Голова Саргона Аккадского</strong><span>ок. 2300 г. до н.э., Национальный музей Ирака, Багдад</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Dancing_girl_of_Mohenjo-daro.jpg" alt="Танцующая девушка">
+        <div class="caption"><strong>Танцующая девушка из Мохенджо-Даро</strong><span>ок. 2300–1750 гг. до н.э., Национальный музей, Нью-Дели</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Gudea_of_Lagash_Girsu.jpg" alt="Гудеа Лагашский">
+        <div class="caption"><strong>Статуя Гудеа Лагашского</strong><span>ок. 2144–2124 гг. до н.э., Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Mohenjo-daro_Priesterkönig.jpeg" alt="Жрец-царь">
+        <div class="caption"><strong>Жрец-царь из Мохенджо-Даро</strong><span>ок. 2000–1900 гг. до н.э., Национальный музей Пакистана, Карачи</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Solvognen-00100.jpg" alt="Трундхольмская солнечная колесница">
+        <div class="caption"><strong>Трундхольмская солнечная колесница</strong><span>ок. 1800–1500 гг. до н.э., Национальный музей Дании, Копенгаген</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/British_Museum_Queen_of_the_Night.jpg" alt="Рельеф Берни">
+        <div class="caption"><strong>Рельеф Берни (Царица ночи)</strong><span>XIX–XVIII вв. до н.э., Британский музей, Лондон</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/P1050763_Louvre_code_Hammurabi_face_rwk.JPG" alt="Стела Хаммурапи">
+        <div class="caption"><strong>Стела Хаммурапи</strong><span>1755–1752 гг. до н.э., Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Θεές_των_Όφεων_6391.JPG" alt="Богиня со змеями">
+        <div class="caption"><strong>Богиня со змеями</strong><span>1650–1550 гг. до н.э., Археологический музей Ираклиона, Крит</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Rhyton_in_the_form_of_a_bulls_head_from_Knossos_02.jpg" alt="Ритон в виде головы быка">
+        <div class="caption"><strong>Ритон в виде головы быка</strong><span>ок. 1550–1500 гг. до н.э., Археологический музей Ираклиона</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Colossal_Statue_of_Amenhotep_IV_from_Karnak,_1356-1350_BCE_(4).jpg" alt="Колосс Аменхотепа IV">
+        <div class="caption"><strong>Колосс Аменхотепа IV</strong><span>1356–1350 гг. до н.э., Египетский музей, Каир</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Nofretete_Neues_Museum.jpg" alt="Бюст Нефертити">
+        <div class="caption"><strong>Бюст Нефертити</strong><span>ок. 1351–1334 гг. до н.э., Новый музей, Берлин</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/CairoEgMuseumTaaMaskMostlyPhotographed.jpg" alt="Маска Тутанхамона">
+        <div class="caption"><strong>Маска Тутанхамона</strong><span>ок. 1323 г. до н.э., Египетский музей, Каир</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Templo_de_Ramsés_II,_Abu_Simbel,_Egipto,_2022-04-02,_DD_03.jpg" alt="Храм Рамсеса II в Абу-Симбеле">
+        <div class="caption"><strong>Большой храм Рамсеса II в Абу-Симбеле</strong><span>ок. 1280 г. до н.э., Абу-Симбел, Египет</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Lion_Gate_Mycenes_OLC.jpg" alt="Львиные ворота в Микенах">
+        <div class="caption"><strong>Львиные ворота</strong><span>1250 г. до н.э., Микены, Греция</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/CabezaColosal1_MuseoXalapa.jpg" alt="Ольмекская колоссальная голова">
+        <div class="caption"><strong>Ольмекская колоссальная голова</strong><span>до 900 г. до н.э., Музей антропологии, Халапа, Мексика</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Stone_statue,_late_Jomon_period.JPG" alt="Догу периода Дзёмон">
+        <div class="caption"><strong>Глиняная фигурка догу</strong><span>1000–400 гг. до н.э., Токийский национальный музей</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Lammasu.jpg" alt="Ассирийский ламассу">
+        <div class="caption"><strong>Ассирийский ламассу</strong><span>ок. 800–721 гг. до н.э., Музей Восточного института, Чикаго</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Genien,_Nimrud_870_v._Chr._Aegyptisches_Museum,_Muenchen-4.jpg" alt="Крылатый гений из Нимруда">
+        <div class="caption"><strong>Крылатый гений из Нимруда</strong><span>ок. 870 г. до н.э., Египетский музей, Мюнхен</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Lady_of_Auxerre_Louvre_Ma3098_n1.jpg" alt="Дама из Осера">
+        <div class="caption"><strong>Дама из Осера</strong><span>ок. 650–625 гг. до н.э., Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Ac.kleobisandbiton.jpg" alt="Клеобис и Битон">
+        <div class="caption"><strong>Клеобис и Битон</strong><span>ок. 580 г. до н.э., Археологический музей Дельф</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Chrys3.jpg" alt="Хрисоэлефантинный торс Аполлона">
+        <div class="caption"><strong>Хрисоэлефантинный торс Аполлона</strong><span>ок. 550 г. до н.э., Археологический музей Дельф</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/ACMA_679_Kore_1.JPG" alt="Кора в пеплосе">
+        <div class="caption"><strong>Кора в пеплосе</strong><span>ок. 530 г. до н.э., Музей Акрополя, Афины</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Banditaccia_Sarcofago_Degli_Sposi.jpg" alt="Саркофаг супругов">
+        <div class="caption"><strong>Саркофаг супругов</strong><span>530–510 гг. до н.э., Национальный этрусский музей, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Bull_capital_Apadana_Louvre_AOD1_(1).jpg" alt="Капитель с быками из Суз">
+        <div class="caption"><strong>Капитель с быками из Суз</strong><span>ок. 510 г. до н.э., Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Museo_Arqueológico_Nacional_-_18529_-_Bicha_de_Balazote_01.jpg" alt="Бича из Баласоте">
+        <div class="caption"><strong>Бича из Баласоте</strong><span>VI в. до н.э., Национальный археологический музей, Мадрид</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Decorazione_fittile_del_santuario_di_portonaccio,_510-500_ac_ca,_acroteri,_apollo_02.jpg" alt="Аполлон из Вей">
+        <div class="caption"><strong>Аполлон из Вей</strong><span>ок. 510–500 гг. до н.э., Национальный этрусский музей, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Chimera_di_Arezzo.jpg" alt="Химера из Ареццо">
+        <div class="caption"><strong>Химера из Ареццо</strong><span>ок. 400 г. до н.э., Национальный археологический музей, Флоренция</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Grupo_tiranicidas_02.JPG" alt="Гармодий и Аристогитон">
+        <div class="caption"><strong>Гармодий и Аристогитон</strong><span>оригинал 476 г. до н.э., Национальный археологический музей, Неаполь</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Aurige._Musée_Delphes._Grèce.png" alt="Дельфийский возничий">
+        <div class="caption"><strong>Дельфийский возничий</strong><span>ок. 478 г. до н.э., Археологический музей Дельф</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Ludovisi_throne_Altemps_Inv8570_n4.jpg" alt="Трон Людовизи">
+        <div class="caption"><strong>Трон Людовизи</strong><span>490–450 гг. до н.э., Национальный римский музей, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Bronze_Zeus_or_Poseidon_NAMA_X_15161_Athens_Greece.jpg" alt="Артемисионский бог">
+        <div class="caption"><strong>Артемисионский бог (Зевс или Посейдон)</strong><span>460–450 гг. до н.э., Национальный археологический музей, Афины</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Reggio_calabria_museo_nazionale_bronzi_di_riace.jpg" alt="Риаче бронзы">
+        <div class="caption"><strong>Риаче бронзы</strong><span>460–450 гг. до н.э., Национальный музей Великой Греции, Реджо-Калабрия</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Discobolus_in_National_Roman_Museum_Palazzo_Massimo_alle_Terme.JPG" alt="Дискобол">
+        <div class="caption"><strong>Дискобол (Мирон)</strong><span>оригинал ок. 450 г. до н.э., Национальный римский музей, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Athena_marsius05_pushkin.jpg" alt="Афина и Марсий">
+        <div class="caption"><strong>Афина и Марсий (Мирон)</strong><span>оригинал ок. 450 г. до н.э., ГМИИ им. Пушкина, Москва</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/South_metope_27_Parthenon_BM.jpg" alt="Метопа Парфенона">
+        <div class="caption"><strong>Метопа Парфенона (мраморы Элгина)</strong><span>ок. 447–433 гг. до н.э., Британский музей, Лондон</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Doryphoros_(cast,_Pushkin_museum)_06_by_shakko.jpg" alt="Дорифор">
+        <div class="caption"><strong>Дорифор (Поликлет)</strong><span>оригинал ок. 440 г. до н.э., ГМИИ им. Пушкина, Москва (слепок)</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Wounded_Amazon_by_Polycleitos_-_Altes_Museum_-_Berlin_-_Germany_2017.jpg" alt="Раненая амазонка">
+        <div class="caption"><strong>Раненая амазонка (Поликлет)</strong><span>оригинал ок. 430 г. до н.э., Старый музей, Берлин</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Pericles_Pio-Clementino_Inv269.jpg" alt="Герма Перикла">
+        <div class="caption"><strong>Герма Перикла (Кресилай)</strong><span>оригинал ок. 430 г. до н.э., Музеи Ватикана</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Statue_of_Zeus_(Hermitage)_-_Статуя_Юпитера.jpg" alt="Статуя Зевса">
+        <div class="caption"><strong>Статуя Зевса Олимпийского (Фидий)</strong><span>430 г. до н.э. (утрачена), Эрмитаж, Санкт-Петербург</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Diadumenos_pushkin.jpg" alt="Диадумен">
+        <div class="caption"><strong>Диадумен (Поликлет)</strong><span>оригинал ок. 420 г. до н.э., ГМИИ им. Пушкина, Москва (слепок)</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Athènes_Acropole_Caryatides.JPG" alt="Кариатиды Эрехтейона">
+        <div class="caption"><strong>Кариатиды Эрехтейона</strong><span>420–406 гг. до н.э., Афинский акрополь</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/ACMA_973_Nikè_sandale_3.JPG" alt="Ника, поправляющая сандалию">
+        <div class="caption"><strong>Ника, поправляющая сандалию</strong><span>410–400 гг. до н.э., Музей Акрополя, Афины</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Apol·lo_Sauròcton_(350_aC),_Museu_del_Louvre_(París).jpg" alt="Аполлон Сауроктон">
+        <div class="caption"><strong>Аполлон Сауроктон (Пракситель)</strong><span>оригинал ок. 350 г. до н.э., Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Hermes_di_Prassitele,_at_Olimpia,_front_2.jpg" alt="Гермес с младенцем Дионисом">
+        <div class="caption"><strong>Гермес с младенцем Дионисом (Пракситель)</strong><span>350–330 гг. до н.э., Археологический музей Олимпии</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Leaning_satyr_Musei_Capitolini_MC739.jpg" alt="Отдыхающий сатир">
+        <div class="caption"><strong>Отдыхающий сатир (Пракситель)</strong><span>оригинал IV в. до н.э., Капитолийские музеи, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Cnidus_Aphrodite_Altemps_Inv8619.jpg" alt="Афродита Книдская">
+        <div class="caption"><strong>Афродита Книдская (Пракситель)</strong><span>350–330 гг. до н.э. (оригинал утрачен), Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Leda_and_Zeus_(Swan).jpg" alt="Леда и Зевс">
+        <div class="caption"><strong>Леда и Зевс (Тимофей)</strong><span>IV в. до н.э., Капитолийские музеи, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Horses_of_Basilica_San_Marco_bright.jpg" alt="Кони Святого Марка">
+        <div class="caption"><strong>Кони Святого Марка</strong><span>IV в. до н.э. – II–III в. н.э., Собор Святого Марка, Венеция</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Eros_bow_Musei_Capitolini_MC410.jpg" alt="Эрот, натягивающий лук">
+        <div class="caption"><strong>Эрот, натягивающий лук (Лисипп)</strong><span>оригинал утрачен, Капитолийские музеи, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Dama_de_Elche.jpg" alt="Дама из Эльче">
+        <div class="caption"><strong>Дама из Эльче</strong><span>возможно, IV в. до н.э., Национальный археологический музей, Мадрид</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/%22Varvakeion_Athena%22_Statue,_200-250_AD_(28506235035).jpg" alt="Варвакионская Афина">
+        <div class="caption"><strong>Варвакионская Афина</strong><span>200–250 гг. н.э. (копия Афины Парфенос Фидия), Афины</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Soldier_Horse.JPG" alt="Терракотовая армия">
+        <div class="caption"><strong>Терракотовая армия</strong><span>210–209 гг. до н.э., Сиань, Китай</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Asokanpillar-crop.jpg" alt="Колонна Ашоки">
+        <div class="caption"><strong>Колонна Ашоки</strong><span>ок. 250 г. до н.э., Вайшали, Индия</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Barberini_Faun_Munich_07.jpg" alt="Фавн Барберини">
+        <div class="caption"><strong>Фавн Барберини</strong><span>ок. 200 г. до н.э., Глиптотека, Мюнхен</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Winged_Victory_of_Samothrace_(1).jpg" alt="Ника Самофракийская">
+        <div class="caption"><strong>Ника Самофракийская</strong><span>ок. 200–190 гг. до н.э., Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Pasquino_Group_Loggia_dei_Lanzi_2005_09_13.jpg" alt="Группа Пасквино">
+        <div class="caption"><strong>Группа Пасквино</strong><span>утраченный эллинистический оригинал, Лоджия Ланци, Флоренция</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Pergamon_Museum_Berlin_2007017.jpg" alt="Пергамский алтарь">
+        <div class="caption"><strong>Пергамский алтарь (Гигантомахия)</strong><span>первая половина II в. до н.э., Пергамский музей, Берлин</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Front_views_of_the_Venus_de_Milo.jpg" alt="Венера Милосская">
+        <div class="caption"><strong>Венера Милосская</strong><span>130–100 гг. до н.э., Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Sleeping_Hermaphroditus,_Louvre_Museum,_Paris_14_July_2013.jpg" alt="Спящий Гермафродит">
+        <div class="caption"><strong>Спящий Гермафродит</strong><span>ок. 155 г. до н.э. (оригинал утрачен), Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/0_Prince_séleucide_-_Pal._Massimo.JPG" alt="Эллинистический принц">
+        <div class="caption"><strong>Эллинистический принц</strong><span>II в. до н.э., Палаццо Массимо, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/0_Artemis_of_Ephesus_-_Musei_Capitolini_(2).JPG" alt="Артемида Эфесская">
+        <div class="caption"><strong>Артемида Эфесская</strong><span>многочисленные копии утраченного оригинала, Капитолийские музеи, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Musée_du_Louvre_-_Les_Trois_Grâces.jpg" alt="Три грации">
+        <div class="caption"><strong>Три грации</strong><span>оригинал утрачен, Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Laocoön_and_his_sons_group.jpg" alt="Лаокоон и его сыновья">
+        <div class="caption"><strong>Лаокоон и его сыновья</strong><span>ок. I в. до н.э., Музеи Ватикана</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Torso_del_belvedere,_forse_aiace_telamonio_che_medita_suicidio,_I_sec._ac._di_apollonios,_forse_da_bronzo_greco_del_200-150_ac._ca_01.JPG" alt="Бельведерский торс">
+        <div class="caption"><strong>Бельведерский торс</strong><span>I в. до н.э., Музеи Ватикана</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Grupo_de_San_Ildefonso_(Museo_del_Prado)_02.jpg" alt="Группа Сан-Ильдефонсо">
+        <div class="caption"><strong>Группа Сан-Ильдефонсо</strong><span>I в. н.э., музей Прадо, Мадрид</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Arte_romana,_Lottatori,_1-100_circa_da_un_originale_del_III_secolo_a.C._02.JPG" alt="Борцы Уффици">
+        <div class="caption"><strong>Борцы Уффици</strong><span>I в. до н.э. (римская копия), Галерея Уффици, Флоренция</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Venere_Callipige_Napoli.jpg" alt="Венера Каллипига">
+        <div class="caption"><strong>Венера Каллипига</strong><span>конец I в. до н.э., Национальный археологический музей, Неаполь</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Cleomene_di_Apollodoro,_venere_medici,_I_secolo_ac_ca.jpg" alt="Венера Медицейская">
+        <div class="caption"><strong>Венера Медицейская</strong><span>I в. до н.э., Галерея Уффици, Флоренция</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Thermae_boxer_Massimo_Inv1055.jpg" alt="Кулачный боец">
+        <div class="caption"><strong>Кулачный боец (Боксёр в покое)</strong><span>330–50 гг. до н.э., Палаццо Массимо, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Statue-Augustus.jpg" alt="Август из Прима-Порта">
+        <div class="caption"><strong>Август из Прима-Порта</strong><span>I в. н.э., Музеи Ватикана</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/0_Spinaro_-_Palazzo_dei_Conservatori,_Musei_Capitolini_(2).JPG" alt="Мальчик, вынимающий занозу">
+        <div class="caption"><strong>Мальчик, вынимающий занозу</strong><span>I в. до н.э. (копия греческого оригинала), Капитолийские музеи, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Altemps_Hera_Ludovisi_01.JPG" alt="Юнона Людовизи">
+        <div class="caption"><strong>Юнона Людовизи</strong><span>I в. н.э., Палаццо Альтемпс, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Caligula,_Ny_Carlsberg_Glyptotek.jpg" alt="Калигула">
+        <div class="caption"><strong>Калигула</strong><span>до 41 г. н.э., Глиптотека Ню Карлсберг, Копенгаген</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Socrate_du_Louvre.jpg" alt="Портрет Сократа">
+        <div class="caption"><strong>Портрет Сократа</strong><span>I в. н.э. (копия Лисиппа), Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Napoli,_museo_archeologico_(8105951693).jpg" alt="Отдыхающий Гермес">
+        <div class="caption"><strong>Отдыхающий Гермес</strong><span>до 79 г. н.э., Национальный археологический музей, Неаполь</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Cupid_psyche.jpg" alt="Амур и Психея">
+        <div class="caption"><strong>Амур и Психея</strong><span>I–II вв. н.э., Капитолийские музеи, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Italie_Rome_Saint-Pierre_Musee_Vatican_Nil_-_panoramio.jpg" alt="Нил Ватиканский">
+        <div class="caption"><strong>Нил Ватиканский</strong><span>I в. н.э., Музеи Ватикана</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Gandhara_Buddha_(tnm).jpeg" alt="Стоящий Будда из Гандхары">
+        <div class="caption"><strong>Стоящий Будда из Гандхары</strong><span>I–II вв. н.э., Токийский национальный музей</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/British_Museum_-_Room_22_(17321719776).jpg" alt="Бронзовая голова Гипноса">
+        <div class="caption"><strong>Бронзовая голова Гипноса</strong><span>I–II вв. н.э., Британский музей, Лондон</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Apollo_del_Belvedere.jpg" alt="Аполлон Бельведерский">
+        <div class="caption"><strong>Аполлон Бельведерский</strong><span>ок. 120–140 гг. н.э., Музеи Ватикана</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Diane_de_Versailles_Leochares_2.jpg" alt="Диана Версальская">
+        <div class="caption"><strong>Диана Версальская</strong><span>I–II вв. н.э. (копия Леохара), Лувр, Париж</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Sleeping_Ariadne_2.jpg" alt="Спящая Ариадна">
+        <div class="caption"><strong>Спящая Ариадна</strong><span>II в. н.э., Музеи Ватикана</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Ludovisi_Gaul_-_Palazzo_Altemps_-_Rome_2015.jpg" alt="Людовизи Галл">
+        <div class="caption"><strong>Людовизи Галл (Эпигон)</strong><span>II в. н.э. (копия), Палаццо Альтемпс, Рим</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Arte_romana,_busto_di_omero_tipo_ellenistico_cieco,_in_marmo_pentelico,_150-200_dc_ca.,_da_palazzo_farnese_a_roma_(napoli,_man).jpg" alt="Бюст Гомера">
+        <div class="caption"><strong>Бюст Гомера</strong><span>138–161 гг. н.э., Национальный археологический музей, Неаполь</span></div>
+    </div>
+
+    <div class="card">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Arte_romana,_ares_ludovisi,_con_putto_di_restauro_del_bernini_(1622),_II_secolo_dc_da_orig._greco_del_IV_o_II_secolo_ac_(palazzo_altemps)_01.jpg" alt="Арес Людовизи">
+        <div class="caption"><strong>Арес Людовизи</strong><span>II в. н.э. (копия), Палаццо Альтемпс, Рим</span></div>
+    </div>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.body.classList.add('js-loading');
+
+    const status = document.createElement('div');
+    status.id = 'load-status';
+    status.textContent = 'Загрузка...';
+    document.body.appendChild(status);
+
+    const allImages = Array.from(document.querySelectorAll('.gallery img'));
+    const total = allImages.length;
+    let loadedCount = 0;
+
+    const queue = allImages.map(img => {
+        const src = img.getAttribute('src');
+        if (src) {
+            img.removeAttribute('src');
+            img.dataset.src = src;
+        }
+        return img;
+    });
+
+    let index = 0;
+
+    function updateStatus() {
+        status.textContent = 'Загрузка ' + loadedCount + ' из ' + total;
+    }
+
+    function loadNext() {
+        if (index >= queue.length) {
+            status.textContent = 'Готово: ' + total + ' из ' + total;
+            setTimeout(() => status.remove(), 2000);
+            return;
+        }
+
+        const img = queue[index++];
+        const src = img.dataset.src;
+
+        if (!src) {
+            loadedCount++;
+            updateStatus();
+            setTimeout(loadNext, 0);
+            return;
+        }
+
+        const preloader = new Image();
+
+        preloader.onload = function () {
+            img.src = src;
+            img.classList.add('loaded');
+            loadedCount++;
+            updateStatus();
+            setTimeout(loadNext, 0);
+        };
+
+        preloader.onerror = function () {
+            img.alt = (img.alt || 'Скульптура') + ' (не загружено)';
+            img.classList.add('loaded');
+            loadedCount++;
+            updateStatus();
+            setTimeout(loadNext, 0);
+        };
+
+        preloader.src = src;
+    }
+
+    updateStatus();
+    loadNext();
+});
+</script>
+
+</body>
+</html>
