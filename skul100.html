@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Ночная парковка — Уличный кинотеатр</title>
+    <title>Ночная парковкУличный кинотеатр</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; padding: 0; overflow: hidden; background-color: #000; font-family: Arial, Helvetica, sans-serif; width: 100%; height: 100%; }
@@ -190,17 +190,16 @@
         }
 
         // ============================================================
-        // 4. КИНОЭКРАН (В ДВА РАЗА БОЛЬШЕ)
+        // 4. КИНОЭКРАН
         // ============================================================
         const SCREEN_WIDTH = 19.36;
         const SCREEN_HEIGHT = 10.89;
         const SCREEN_Y = SCREEN_HEIGHT / 2;
         const SCREEN_Z = 0;
-        
+
         const IFRAME_W = 1280;
         const IFRAME_H = 720;
-        
-        // Ссылка на видео ВКонтакте (преобразованная из m.vkvideo.ru)
+
         const VK_VIDEO_URL = 'https://vkvideo.ru/video_ext.php?oid=-230306612&id=456239224&autoplay=1&hd=2';
 
         const iframeStyle = `
@@ -244,16 +243,16 @@
 
             const item = document.createElement('div');
             item.className = 'channelItem active';
-            
+
             const dot = document.createElement('span');
             dot.className = 'statusDot';
             dot.style.background = '#4dff9a';
             dot.style.boxShadow = '0 0 8px #4dff9a';
-            
+
             const name = document.createElement('span');
             name.className = 'channelName';
             name.textContent = 'VK Видео';
-            
+
             const type = document.createElement('span');
             type.className = 'channelType';
             type.textContent = 'VK';
@@ -261,7 +260,7 @@
             item.appendChild(dot);
             item.appendChild(name);
             item.appendChild(type);
-            
+
             channelList.appendChild(item);
         }
 
@@ -276,7 +275,7 @@
         buildMenu();
 
         // ============================================================
-        // 6. ОКРУЖЕНИЕ (Машины, фонари, деревья)
+        // 6. ОКРУЖЕНИЕ
         // ============================================================
         function createCar(color, x, z, rotationY = 0) {
             const carGroup = new THREE.Group();
@@ -501,31 +500,148 @@
         myCharacter.position.set(0, 0, 22); myCharacter.rotation.y = Math.PI;
         setCharacterOpacity(myCharacter, 0); scene.add(myCharacter);
 
+        // -------- МУЛЬТИПЛЕЕР (Trystero, nostr, STUN, retry) --------
         let room = null, posAction = null, joinAction = null, leaveAction = null;
+
+        function updatePeerCount() {
+            const el = document.getElementById('info');
+            if (!el) return;
+            el.textContent = `🎥 Онлайн: ${Object.keys(peers).length + 1}`;
+        }
+
+        async function loadTrystero() {
+            const urls = [
+                'https://cdn.jsdelivr.net/npm/trystero/nostr/+esm',
+                'https://esm.run/trystero/nostr',
+                'https://cdn.jsdelivr.net/npm/trystero/+esm',
+                'https://esm.run/trystero'
+            ];
+            let lastErr;
+            for (const url of urls) {
+                try {
+                    console.log('[MP] Trystero ←', url);
+                    const mod = await import(url);
+                    if (mod && mod.joinRoom) return mod;
+                } catch (e) {
+                    console.warn('[MP] fail', url, e?.message || e);
+                    lastErr = e;
+                }
+            }
+            throw lastErr || new Error('All CDNs failed');
+        }
+
         async function initMultiplayer() {
             try {
-                const { joinRoom } = await import('https://esm.run/trystero');
-                room = joinRoom({ appId: 'cinema-parking-multiplayer' }, 'main');
-                posAction   = room.makeAction('pos'); joinAction  = room.makeAction('join'); leaveAction = room.makeAction('leave');
+                const { joinRoom } = await loadTrystero();
+
+                room = joinRoom({
+                    appId: 'cinema-parking-multiplayer',
+                    rtcConfig: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' },
+                            { urls: 'stun:stun.cloudflare.com:3478' }
+                        ]
+                    }
+                }, 'main');
+
+                posAction   = room.makeAction('pos');
+                joinAction  = room.makeAction('join');
+                leaveAction = room.makeAction('leave');
+
+                console.log('[MP] room ready, selfId =', room.selfId);
+                updatePeerCount();
+
+                room.onPeerJoin = (peerId) => {
+                    console.log('[MP] → peer JOIN', peerId);
+                    if (!joinAction || !myCharacter) return;
+                    const payload = {
+                        color: myColor,
+                        x: myCharacter.position.x,
+                        z: myCharacter.position.z
+                    };
+                    let tries = 0;
+                    const t = setInterval(() => {
+                        tries++;
+                        try { joinAction.send(payload, { target: peerId }); } catch (_) {}
+                        if (tries >= 3) clearInterval(t);
+                    }, 500);
+                    updatePeerCount();
+                };
+
+                room.onPeerLeave = (peerId) => {
+                    console.log('[MP] ← peer LEAVE', peerId);
+                    if (peers[peerId]) peers[peerId].fading = true;
+                    setTimeout(updatePeerCount, 200);
+                };
 
                 joinAction.onMessage = (data, { peerId }) => {
+                    console.log('[MP] join msg from', peerId, data);
                     if (!peers[peerId]) spawnPeer(peerId, data.color, data.x, data.z);
-                    else { peers[peerId].fading = false; peers[peerId].targetX = data.x; peers[peerId].targetZ = data.z; }
-                    if (myCharacter && posAction) posAction.send({ x: myCharacter.position.x, z: myCharacter.position.z, rot: myCharacter.rotation.y }, { target: peerId });
+                    else {
+                        peers[peerId].fading = false;
+                        peers[peerId].lastSeen = Date.now();
+                        peers[peerId].targetX = data.x;
+                        peers[peerId].targetZ = data.z;
+                    }
+                    if (myCharacter && posAction) {
+                        posAction.send({
+                            x: myCharacter.position.x,
+                            z: myCharacter.position.z,
+                            rot: myCharacter.rotation.y
+                        }, { target: peerId });
+                    }
+                    updatePeerCount();
                 };
+
                 posAction.onMessage = (data, { peerId }) => {
                     if (!peers[peerId]) spawnPeer(peerId, null, data.x, data.z);
                     const p = peers[peerId]; if (!p) return;
-                    p.lastSeen = Date.now(); p.targetX = data.x; p.targetZ = data.z; p.targetRot = data.rot;
+                    p.lastSeen = Date.now();
+                    p.targetX = data.x;
+                    p.targetZ = data.z;
+                    p.targetRot = data.rot;
                 };
-                leaveAction.onMessage = (data, { peerId }) => { if (peers[peerId]) peers[peerId].fading = true; };
-                room.onPeerJoin = (peerId) => { if (joinAction && myCharacter) joinAction.send({ color: myColor, x: myCharacter.position.x, z: myCharacter.position.z }, { target: peerId }); };
-                room.onPeerLeave = (peerId) => { if (peers[peerId]) peers[peerId].fading = true; };
-                setInterval(() => { if (posAction && myCharacter) posAction.send({ x: myCharacter.position.x, z: myCharacter.position.z, rot: myCharacter.rotation.y }); }, 100);
-                setInterval(() => { const now = Date.now(); for (const id in peers) { if (!peers[id].fading && now - peers[id].lastSeen > 4000) peers[id].fading = true; } }, 1000);
-                const leave = () => { if (leaveAction) leaveAction.send({}); if (room) room.leave(); };
-                window.addEventListener('beforeunload', leave); window.addEventListener('pagehide', leave);
-            } catch (err) { console.warn('Trystero не загрузился:', err); }
+
+                leaveAction.onMessage = (data, { peerId }) => {
+                    if (peers[peerId]) peers[peerId].fading = true;
+                    setTimeout(updatePeerCount, 200);
+                };
+
+                setInterval(() => {
+                    if (posAction && myCharacter) {
+                        posAction.send({
+                            x: myCharacter.position.x,
+                            z: myCharacter.position.z,
+                            rot: myCharacter.rotation.y
+                        });
+                    }
+                }, 100);
+
+                setInterval(() => {
+                    const now = Date.now();
+                    for (const id in peers) {
+                        if (!peers[id].fading && now - peers[id].lastSeen > 8000) {
+                            peers[id].fading = true;
+                        }
+                    }
+                }, 1000);
+
+                const leave = () => {
+                    try { leaveAction?.send({}); } catch (_) {}
+                    try { room?.leave(); } catch (_) {}
+                };
+                window.addEventListener('beforeunload', leave);
+                window.addEventListener('pagehide', leave);
+
+            } catch (err) {
+                console.error('[MP] init failed:', err);
+                const el = document.getElementById('info');
+                if (el) {
+                    el.textContent = '⚠️ Мультиплеер недоступен';
+                    setTimeout(() => { el.textContent = '🎥 Ночная парковка — Уличный кинотеатр'; }, 6000);
+                }
+            }
         }
 
         function spawnPeer(id, color, x, z) {
