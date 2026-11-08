@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Шар на пружинах</title>
+    <title>Нектарная Рябь</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #02050a; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #05020a; font-family: sans-serif; }
         canvas { display: block; touch-action: none; }
     </style>
 </head>
@@ -23,18 +23,16 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Water } from 'three/addons/objects/Water.js';
 import { Sky } from 'three/addons/objects/Sky.js';
 
 // ==========================================
-// 1. БАЗОВАЯ СЦЕНА И ОСВЕЩЕНИЕ
+// 1. БАЗОВАЯ СЦЕНА
 // ==========================================
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x02050a, 0.0015);
+scene.fog = new THREE.FogExp2(0x05020a, 0.0015);
 
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 10000);
-// Поднимаем камеру чуть выше, чтобы смотреть на парящий шар
-camera.position.set(12, 10, 20);
+camera.position.set(15, 10, 25);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -47,88 +45,164 @@ controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI / 2 + 0.05;
 controls.enableZoom = false;
 controls.enablePan = false;
-// Автовращение камеры для медитативного эффекта
 controls.autoRotate = true;
-controls.autoRotateSpeed = 0.5;
+controls.autoRotateSpeed = 0.2;
 
 // Свет
-scene.add(new THREE.AmbientLight(0x222233, 2));
-const moonLight = new THREE.DirectionalLight(0x88ccff, 2);
+scene.add(new THREE.AmbientLight(0x221133, 2));
+const moonLight = new THREE.DirectionalLight(0xffddaa, 2);
 moonLight.position.set(10, 20, 10);
 scene.add(moonLight);
 
-// Свет из глубины (подсвечивает воду и низ шара)
-const deepLight = new THREE.PointLight(0x00e5ff, 5, 30);
-deepLight.position.set(0, 0, 0);
-scene.add(deepLight);
-
-// Точечный свет рядом с шаром (чтобы он ярко выделялся)
-const orbLight = new THREE.PointLight(0x4fc3f7, 4, 20);
+const orbLight = new THREE.PointLight(0x4fc3f7, 5, 25);
 orbLight.position.set(0, 5, 5);
 scene.add(orbLight);
 
 // ==========================================
-// 2. НЕБО И ВОДА
+// 2. НЕБО
 // ==========================================
 const sky = new Sky();
 sky.scale.setScalar(10000);
 scene.add(sky);
 const skyU = sky.material.uniforms;
-skyU['turbidity'].value = 10;
-skyU['rayleigh'].value = 2;
-skyU['mieCoefficient'].value = 0.005;
+skyU['turbidity'].value = 20;
+skyU['rayleigh'].value = 3;
+skyU['mieCoefficient'].value = 0.01;
 skyU['mieDirectionalG'].value = 0.8;
 
 const sun = new THREE.Vector3();
-const phi = THREE.MathUtils.degToRad(85);
+const phi = THREE.MathUtils.degToRad(80);
 const theta = THREE.MathUtils.degToRad(180);
 sun.setFromSphericalCoords(1, phi, theta);
 skyU['sunPosition'].value.copy(sun);
 
-// Процедурная текстура нормалей для воды
-const waterNormals = (() => {
-    const size = 128;
-    const canvas = document.createElement('canvas');
-    canvas.width = size; canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    const imgData = ctx.createImageData(size, size);
-    for (let i = 0; i < size * size; i++) {
-        const x = i % size; const y = Math.floor(i / size);
-        imgData.data[i*4] = (Math.sin(x*0.2) * 0.5 + 0.5) * 255;
-        imgData.data[i*4+1] = (Math.cos(y*0.2) * 0.5 + 0.5) * 255;
-        imgData.data[i*4+2] = 255; imgData.data[i*4+3] = 255;
-    }
-    ctx.putImageData(imgData, 0, 0);
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.colorSpace = THREE.NoColorSpace;
-    return tex;
-})();
+// ==========================================
+// 3. НЕКТАРНАЯ ВОДА (Сетка x8)
+// ==========================================
+// Увеличили количество сегментов с 256 до 2048 (в 8 раз больше по каждой оси)
+const waterGeometry = new THREE.PlaneGeometry(666, 666, 666, 666);
 
-const water = new Water(new THREE.PlaneGeometry(10000, 10000), {
-    textureWidth: 512, textureHeight: 512,
-    waterNormals: waterNormals,
-    sunDirection: sun.clone().normalize(),
-    sunColor: 0xffffff, waterColor: 0x001e3c,
-    distortionScale: 3.7, fog: scene.fog !== undefined,
+const waterMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+        uTime: { value: 0 },
+        uFogColor: { value: new THREE.Color(0x05020a) },
+        uFogDensity: { value: 0.0015 }
+    },
+    vertexShader: `
+        uniform float uTime;
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        varying float vHeight;
+        varying float vFogDepth;
+        varying vec2 vUv;
+
+        // Резкая, высокая рябь
+        float getWaveHeight(vec2 pos, float time) {
+            float h = 0.0;
+            // Основные крупные волны
+            h += sin(pos.x * 0.1 + time * 1.2) * cos(pos.y * 0.12 + time * 1.0) * 0.8;
+            // Резкие заостренные пики
+            h += pow(abs(sin(pos.x * 0.3 - time * 2.0)), 3.0) * 0.5;
+            h += pow(abs(cos(pos.y * 0.35 + time * 2.5)), 3.0) * 0.4;
+            // Мелкая быстрая рябь
+            h += sin(pos.x * 0.8 + time * 4.0) * 0.1;
+            return h;
+        }
+
+        void main() {
+            vec3 pos = position;
+            vUv = uv;
+            
+            float h = getWaveHeight(pos.xy, uTime);
+            pos.z += h; 
+            vHeight = h;
+
+            // Уменьшили шаг eps для более точного расчета нормалей на плотной сетке
+            float eps = 0.05;
+            float hx = getWaveHeight(pos.xy + vec2(eps, 0.0), uTime);
+            float hy = getWaveHeight(pos.xy + vec2(0.0, eps), uTime);
+            
+            vec3 v1 = vec3(eps, 0.0, hx - h);
+            vec3 v2 = vec3(0.0, eps, hy - h);
+            
+            vec3 normal = normalize(cross(v1, v2));
+            vNormal = normalize(normalMatrix * normal);
+
+            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+            vViewPosition = -mvPosition.xyz;
+            vFogDepth = -mvPosition.z;
+
+            gl_Position = projectionMatrix * mvPosition;
+        }
+    `,
+    fragmentShader: `
+        uniform float uTime;
+        uniform vec3 uFogColor;
+        uniform float uFogDensity;
+        
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        varying float vHeight;
+        varying float vFogDepth;
+        varying vec2 vUv;
+
+        void main() {
+            vec3 normal = normalize(vNormal);
+            vec3 viewDir = normalize(vViewPosition);
+
+            // Переливы нектара
+            float mix1 = sin(vUv.x * 15.0 + uTime * 0.4) * 0.5 + 0.5;
+            float mix2 = cos(vUv.y * 12.0 - uTime * 0.2) * 0.5 + 0.5;
+            
+            vec3 colorAmber = vec3(1.0, 0.7, 0.2);
+            vec3 colorMagenta = vec3(0.9, 0.2, 0.6);
+            vec3 colorCyan = vec3(0.2, 0.9, 1.0);
+            
+            vec3 nectarColor = mix(colorAmber, colorMagenta, mix1);
+            nectarColor = mix(nectarColor, colorCyan, mix2 * 0.5);
+
+            // Блики
+            vec3 halfDir = normalize(vec3(0.5, 0.5, 0.5) + viewDir);
+            float spec = pow(max(dot(normal, halfDir), 0.0), 80.0); 
+            
+            // Эффект Френеля
+            float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
+
+            // Сборка цвета
+            vec3 finalColor = nectarColor * 0.3; 
+            finalColor += vec3(1.0, 0.95, 0.9) * spec * 3.0; 
+            finalColor += nectarColor * fresnel * 1.5;
+
+            // Подсветка высоких пиков
+            float peakGlow = smoothstep(0.6, 1.0, vHeight);
+            finalColor += vec3(1.0, 0.8, 0.5) * peakGlow * 0.5;
+
+            // Туман
+            float fogFactor = 1.0 - exp(-uFogDensity * uFogDensity * vFogDepth * vFogDepth);
+            finalColor = mix(finalColor, uFogColor, clamp(fogFactor, 0.0, 1.0));
+
+            gl_FragColor = vec4(finalColor, 1.0);
+        }
+    `
 });
+
+const water = new THREE.Mesh(waterGeometry, waterMaterial);
 water.rotation.x = -Math.PI / 2;
 water.position.y = -2;
 scene.add(water);
 
 // ==========================================
-// 3. ДЫШАЩИЙ ШАР
+// 4. БОЛЬШОЙ ДЫШАЩИЙ ШАР
 // ==========================================
-// Позиция покоя — парит над водой по центру
-const restPosition = new THREE.Vector3(0, 5, 0); 
+const restPosition = new THREE.Vector3(0, 7, 0); 
+const ballBaseRadius = 2.5;
 
-const ballGeo = new THREE.SphereGeometry(1.5, 64, 64);
+const ballGeo = new THREE.SphereGeometry(ballBaseRadius, 64, 64);
 const ballMat = new THREE.MeshStandardMaterial({
     color: 0x4fc3f7, roughness: 0.2, metalness: 0.1,
     emissive: new THREE.Color(0x1a237e), emissiveIntensity: 0.6,
 });
 
-// Шейдер "дыхания" и волн на поверхности шара
 ballMat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = { value: 0 };
     shader.vertexShader = `
@@ -138,7 +212,7 @@ ballMat.onBeforeCompile = (shader) => {
         `#include <begin_vertex>`,
         `
         #include <begin_vertex>
-        float wave = sin(position.x * 3.0 + uTime) * cos(position.y * 3.0 + uTime * 0.7) * 0.05;
+        float wave = sin(position.x * 3.0 + uTime) * cos(position.y * 3.0 + uTime * 0.7) * 0.08;
         transformed += normal * wave;
         `
     );
@@ -150,16 +224,12 @@ ball.position.copy(restPosition);
 scene.add(ball);
 
 // ==========================================
-// 4. НЕВИДИМЫЕ ПРУЖИНЫ
+// 5. НЕВИДИМЫЕ ПРУЖИНЫ
 // ==========================================
-// Точки крепления в пространстве (вокруг шара)
 const anchors = [
-    new THREE.Vector3(0, 12, 0),   // Сверху
-    new THREE.Vector3(0, -2, 0),   // Снизу (под водой)
-    new THREE.Vector3(7, 5, 0),    // Справа
-    new THREE.Vector3(-7, 5, 0),   // Слева
-    new THREE.Vector3(0, 5, 7),    // Спереди
-    new THREE.Vector3(0, 5, -7)    // Сзади
+    new THREE.Vector3(0, 15, 0), new THREE.Vector3(0, -3, 0),
+    new THREE.Vector3(10, 7, 0), new THREE.Vector3(-10, 7, 0),
+    new THREE.Vector3(0, 7, 10), new THREE.Vector3(0, 7, -10)
 ];
 
 const springs = [];
@@ -171,7 +241,7 @@ const getSpringPoints = (start, end) => {
         if (i > 0 && i < 20) {
             const dir = new THREE.Vector3().subVectors(end, start).normalize();
             const perp = new THREE.Vector3(dir.y, -dir.x, dir.z).normalize();
-            p.add(perp.multiplyScalar(Math.sin(t * Math.PI * 8) * 0.1));
+            p.add(perp.multiplyScalar(Math.sin(t * Math.PI * 8) * 0.15));
         }
         pts.push(p);
     }
@@ -180,13 +250,13 @@ const getSpringPoints = (start, end) => {
 
 anchors.forEach(anchor => {
     const geo = new THREE.BufferGeometry().setFromPoints(getSpringPoints(anchor, restPosition));
-    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.6 }));
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffddaa, transparent: true, opacity: 0.3 }));
     scene.add(line);
     springs.push({ line, anchor });
 });
 
 // ==========================================
-// 5. ФИЗИКА И ИНТЕРАКТИВ
+// 6. ИНТЕРАКТИВ (Перетаскивание шара)
 // ==========================================
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -201,9 +271,8 @@ const onPointerDown = (e) => {
     
     if (raycaster.intersectObject(ball).length > 0) {
         isDragging = true;
-        controls.autoRotate = false; // Останавливаем вращение камеры при взаимодействии
+        controls.autoRotate = false;
         controls.enabled = false;
-        
         const camDir = camera.getWorldDirection(new THREE.Vector3());
         plane.setFromNormalAndCoplanarPoint(camDir, ball.position);
         e.stopPropagation();
@@ -234,7 +303,7 @@ window.addEventListener('pointermove', onPointerMove);
 window.addEventListener('pointerup', onPointerUp);
 
 // ==========================================
-// 6. АНИМАЦИЯ
+// 7. АНИМАЦИЯ
 // ==========================================
 const clock = new THREE.Clock();
 
@@ -244,22 +313,14 @@ function animate() {
     const delta = Math.min(clock.getDelta(), 0.05);
     const elapsed = clock.elapsedTime;
 
-    // Волны на воде
-    water.material.uniforms['time'].value += delta;
-
-    // Пульсация света из глубины
-    deepLight.intensity = 4 + Math.sin(elapsed * 2) * 2;
-    
-    // Пульсация света у шара
-    orbLight.intensity = 3 + Math.sin(elapsed * 1.5) * 1;
-    orbLight.position.copy(ball.position).add(new THREE.Vector3(0, 0, 3));
+    // Обновляем время в шейдере воды
+    waterMaterial.uniforms.uTime.value = elapsed;
 
     // --- Физика шара ---
     if (!isDragging) {
-        // Возврат к точке равновесия
         const force = new THREE.Vector3().subVectors(restPosition, ball.position);
-        velocity.add(force.multiplyScalar(0.08));
-        velocity.multiplyScalar(0.92);
+        velocity.add(force.multiplyScalar(0.06));
+        velocity.multiplyScalar(0.93);
         ball.position.add(velocity.clone().multiplyScalar(delta * 60));
     } else {
         velocity.set(0, 0, 0);
@@ -269,12 +330,15 @@ function animate() {
     const breathScale = 1.0 + Math.sin(elapsed * 1.5) * 0.05;
     ball.scale.set(breathScale, breathScale, breathScale);
 
-    // Обновление волн на поверхности шара
     if (ballMat.userData.shader) {
         ballMat.userData.shader.uniforms.uTime.value = elapsed;
     }
 
-    // Обновление геометрии пружин
+    // Свет
+    orbLight.intensity = 4 + Math.sin(elapsed * 1.5) * 1;
+    orbLight.position.copy(ball.position).add(new THREE.Vector3(0, 0, 4));
+
+    // Пружины
     springs.forEach(({ line, anchor }) => {
         line.geometry.setFromPoints(getSpringPoints(anchor, ball.position));
     });
@@ -283,14 +347,12 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-// Ресайз
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Запуск
 animate();
 </script>
 </body>
