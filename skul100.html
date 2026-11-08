@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Нектарная Рябь</title>
+    <title>Большой Шар и Нектарная Рябь — Ицюань</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #05020a; font-family: sans-serif; }
         canvas { display: block; touch-action: none; }
@@ -32,7 +32,8 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x05020a, 0.0015);
 
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 10000);
-camera.position.set(15, 10, 25);
+// Отодвинули камеру, так как шар стал больше
+camera.position.set(20, 15, 35);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -54,7 +55,8 @@ const moonLight = new THREE.DirectionalLight(0xffddaa, 2);
 moonLight.position.set(10, 20, 10);
 scene.add(moonLight);
 
-const orbLight = new THREE.PointLight(0x4fc3f7, 5, 25);
+// Увеличили мощность света для большого шара
+const orbLight = new THREE.PointLight(0x4fc3f7, 8, 50);
 orbLight.position.set(0, 5, 5);
 scene.add(orbLight);
 
@@ -77,10 +79,9 @@ sun.setFromSphericalCoords(1, phi, theta);
 skyU['sunPosition'].value.copy(sun);
 
 // ==========================================
-// 3. НЕКТАРНАЯ ВОДА (Сетка x8)
+// 3. НЕКТАРНАЯ ВОДА (Сетка 512x512)
 // ==========================================
-// Увеличили количество сегментов с 256 до 2048 (в 8 раз больше по каждой оси)
-const waterGeometry = new THREE.PlaneGeometry(666, 666, 666, 666);
+const waterGeometry = new THREE.PlaneGeometry(3000, 3000, 512, 512);
 
 const waterMaterial = new THREE.ShaderMaterial({
     uniforms: {
@@ -117,8 +118,8 @@ const waterMaterial = new THREE.ShaderMaterial({
             pos.z += h; 
             vHeight = h;
 
-            // Уменьшили шаг eps для более точного расчета нормалей на плотной сетке
-            float eps = 0.05;
+            // Вычисляем нормали
+            float eps = 0.1;
             float hx = getWaveHeight(pos.xy + vec2(eps, 0.0), uTime);
             float hy = getWaveHeight(pos.xy + vec2(0.0, eps), uTime);
             
@@ -192,10 +193,12 @@ water.position.y = -2;
 scene.add(water);
 
 // ==========================================
-// 4. БОЛЬШОЙ ДЫШАЩИЙ ШАР
+// 4. БОЛЬШОЙ ДЫШАЩИЙ ШАР (x2)
 // ==========================================
-const restPosition = new THREE.Vector3(0, 7, 0); 
-const ballBaseRadius = 2.5;
+// Подняли точку покоя, чтобы шар не касался воды
+const restPosition = new THREE.Vector3(0, 10, 0); 
+// УВЕЛИЧИЛИ РАДИУС В ДВА РАЗА (было 2.5, стало 5.0)
+const ballBaseRadius = 5.0;
 
 const ballGeo = new THREE.SphereGeometry(ballBaseRadius, 64, 64);
 const ballMat = new THREE.MeshStandardMaterial({
@@ -224,12 +227,15 @@ ball.position.copy(restPosition);
 scene.add(ball);
 
 // ==========================================
-// 5. НЕВИДИМЫЕ ПРУЖИНЫ
+// 5. НЕВИДИМЫЕ ПРУЖИНЫ (Раздвинуты под размер шара)
 // ==========================================
 const anchors = [
-    new THREE.Vector3(0, 15, 0), new THREE.Vector3(0, -3, 0),
-    new THREE.Vector3(10, 7, 0), new THREE.Vector3(-10, 7, 0),
-    new THREE.Vector3(0, 7, 10), new THREE.Vector3(0, 7, -10)
+    new THREE.Vector3(0, 22, 0),   // Сверху
+    new THREE.Vector3(0, -5, 0),   // Снизу
+    new THREE.Vector3(15, 10, 0),  // Справа
+    new THREE.Vector3(-15, 10, 0), // Слева
+    new THREE.Vector3(0, 10, 15),  // Спереди
+    new THREE.Vector3(0, 10, -15)  // Сзади
 ];
 
 const springs = [];
@@ -241,7 +247,7 @@ const getSpringPoints = (start, end) => {
         if (i > 0 && i < 20) {
             const dir = new THREE.Vector3().subVectors(end, start).normalize();
             const perp = new THREE.Vector3(dir.y, -dir.x, dir.z).normalize();
-            p.add(perp.multiplyScalar(Math.sin(t * Math.PI * 8) * 0.15));
+            p.add(perp.multiplyScalar(Math.sin(t * Math.PI * 8) * 0.2)); // Увеличили амплитуду пружин
         }
         pts.push(p);
     }
@@ -319,7 +325,8 @@ function animate() {
     // --- Физика шара ---
     if (!isDragging) {
         const force = new THREE.Vector3().subVectors(restPosition, ball.position);
-        velocity.add(force.multiplyScalar(0.06));
+        // Немного уменьшили жесткость пружин, так как шар стал тяжелее (больше)
+        velocity.add(force.multiplyScalar(0.04));
         velocity.multiplyScalar(0.93);
         ball.position.add(velocity.clone().multiplyScalar(delta * 60));
     } else {
@@ -335,8 +342,8 @@ function animate() {
     }
 
     // Свет
-    orbLight.intensity = 4 + Math.sin(elapsed * 1.5) * 1;
-    orbLight.position.copy(ball.position).add(new THREE.Vector3(0, 0, 4));
+    orbLight.intensity = 6 + Math.sin(elapsed * 1.5) * 2;
+    orbLight.position.copy(ball.position).add(new THREE.Vector3(0, 0, 5));
 
     // Пружины
     springs.forEach(({ line, anchor }) => {
